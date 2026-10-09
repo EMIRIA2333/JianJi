@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 品牌色 -->
+    <color name="primary">#00A884</color>
+    <color name="primary_dark">#00806B</color>
+    <color name="primary_light">#35D0A5</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="primary_container">#C9F2E6</color>
+    <color name="on_primary_container">#00382B</color>
+    <color name="accent_orange">#FF8A4C</color>
+
+    <!-- 页面与卡片（浅色） -->
+    <color name="bg">#F2F4F7</color>
+    <color name="card_bg">#FFFFFF</color>
+    <color name="card_bg_soft">#F7F9FB</color>
+    <color name="text_primary">#16202A</color>
+    <color name="text_secondary">#8A94A6</color>
+    <color name="divider">#ECEFF3</color>
+    <color name="summary_bg">#E9F7F2</color>
+    <color name="banner_overlay">#E6F2F4F7</color>
+    <color name="banner_overlay_top">#00F2F4F7</color>
+    <color name="icon_bg">#EEF2F6</color>
+    <color name="ripple">#1A000000</color>
+
+    <!-- 金额颜色 -->
+    <color name="expense_red">#E5484D</color>
+    <color name="income_green">#17A673</color>
+
+    <!-- 图表 / 通用 -->
+    <color name="chart_track">#1F8A94A6</color>
+    <color name="bubble_bg">#14FFFFFF</color>
+    <color name="scrim">#99000000</color>
+
+    <!-- 全局毛玻璃：窗口底与卡片都是半透明，透出后面模糊的底图 -->
+    <color name="bg_glass">#59F2F4F7</color>
+    <color name="card_glass">#A6FFFFFF</color>
+    <color name="card_glass_soft">#8CFFFFFF</color>
+    <color name="glass_stroke">#4DFFFFFF</color>
+</resources>
