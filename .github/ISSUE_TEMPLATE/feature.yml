@@ -1,0 +1,23 @@
+name: 功能建议
+description: 新功能 / 改进建议
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: 你想要什么
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: 为什么需要（解决什么问题）
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 请确认
+      options:
+        - label: 该建议不涉及联网上传数据
+        - label: 该建议不涉及绕过支付 / 破解第三方应用

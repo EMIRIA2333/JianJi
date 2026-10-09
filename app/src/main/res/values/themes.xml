@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.JianJi" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
+        <item name="colorPrimaryContainer">@color/primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/on_primary_container</item>
+        <item name="colorSecondary">@color/primary</item>
+        <item name="colorSecondaryContainer">@color/primary_container</item>
+        <item name="colorOnSecondaryContainer">@color/on_primary_container</item>
+        <item name="colorSurface">@color/card_bg</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorSurfaceVariant">@color/card_bg_soft</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorOutline">@color/divider</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/card_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowAnimationStyle">@style/Anim.JianJi</item>
+    </style>
+
+    <!-- 页面切换过渡动画 -->
+    <style name="Anim.JianJi" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/slide_in_right</item>
+        <item name="android:activityOpenExitAnimation">@anim/slide_out_left</item>
+        <item name="android:activityCloseEnterAnimation">@anim/slide_in_left</item>
+        <item name="android:activityCloseExitAnimation">@anim/slide_out_right</item>
+    </style>
+
+    <!-- 通用卡片 -->
+    <style name="Widget.JianJi.Card" parent="Widget.Material3.CardView.Elevated">
+        <!-- 用主题属性而不是写死颜色：「毛玻璃主题」据此把卡片换成半透明 -->
+        <item name="cardBackgroundColor">?attr/colorSurface</item>
+        <item name="cardCornerRadius">18dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <!--
+      全局毛玻璃主题（BaseActivity 按开关 setTheme 应用）：
+      · 页面底 / 卡片 / 卡片次级底全部换成半透明；
+      · 窗口背景在代码里设为「当前背景图的模糊版」→ 所有面板都像磨砂玻璃浮在模糊底上；
+      · **背景图本身保持清晰**（不做任何模糊）。
+    -->
+    <style name="Theme.JianJi.Glass" parent="Theme.JianJi">
+        <item name="android:colorBackground">@color/bg_glass</item>
+        <item name="colorSurface">@color/card_glass</item>
+        <item name="colorSurfaceVariant">@color/card_glass_soft</item>
+        <!-- 窗口底用不透明主题色：对话框不会变透明，且状态栏区域不会露出模糊图（模糊图放在内容区） -->
+        <item name="android:windowBackground">@color/bg</item>
+    </style>
+
+    <style name="JianJiSectionTitle">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+
+    <style name="JianJiCaption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+</resources>

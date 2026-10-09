@@ -1,0 +1,45 @@
+简记 JianJi
+Copyright (C) 2026  EMIRIA2333
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------
+第三方组件（均为二进制链接，未修改其源码）
+--------------------------------------------------------------------------
+
+1. AndroidX Core KTX / AppCompat / ViewPager2 / RecyclerView
+   Copyright (C) The Android Open Source Project
+   License: Apache License 2.0
+   https://developer.android.com/jetpack/androidx
+
+2. Material Components for Android
+   Copyright (C) The Android Open Source Project
+   License: Apache License 2.0
+   https://github.com/material-components/material-components-android
+
+3. JUnit 4（仅测试用，不打包进 APK）
+   License: Eclipse Public License 1.0
+   https://junit.org/junit4/
+
+不在 APK 内的编译期桩
+--------------------------------------------------------------------------
+
+`xposed-stubs/` 是**本项目手写**的编译期空壳（compileOnly），仅提供编译所需的类与方法签名，
+**不包含** Xposed / LSPosed / libxposed 的任何源代码或资源，也不会打包进 APK。
+运行时 API 由用户设备上的 LSPosed 框架提供（LSPosed 本身以 GPL-3.0 发布，与本项目许可兼容）。
+
+图标与内置背景图
+--------------------------------------------------------------------------
+
+由 AI 生成，来源与使用条款说明见 docs/ASSETS.md。

@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground"
+    android:clipToPadding="false"
+    android:paddingBottom="40dp"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.AppBarLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?android:colorBackground">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                android:background="?android:colorBackground"
+                app:navigationIconTint="@color/text_primary"
+                app:title="自动记账设置"
+                app:titleTextColor="@color/text_primary" />
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <LinearLayout
+            android:id="@+id/settingsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="12dp">
+
+            <!-- 识别与确认 -->
+            <TextView
+                style="@style/JianJiSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="8dp"
+                android:text="识别与确认" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.JianJi.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <include android:id="@+id/rowAuto" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowMianmi" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowConfirm" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowOverlay" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowLearn" layout="@layout/item_profile_row" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 账单页与补充 -->
+            <TextView
+                style="@style/JianJiSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="账单页与补充" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.JianJi.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <include android:id="@+id/rowBillScan" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowBillDays" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowRemark" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowBillImage" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowSms" layout="@layout/item_profile_row" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 省电与提醒 -->
+            <TextView
+                style="@style/JianJiSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="省电与提醒" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.JianJi.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <include android:id="@+id/rowPowerSave" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowStatus" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowDiag" layout="@layout/item_profile_row" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 权限与状态（四项合并成一行，点开看状态并跳转） -->
+            <TextView
+                style="@style/JianJiSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="权限与状态" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.JianJi.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <include android:id="@+id/rowPermission" layout="@layout/item_profile_row" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Root 增强（状态 / 一键初始化 / 手动读取 / 间隔 合并进一个弹窗） -->
+            <TextView
+                style="@style/JianJiSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="Root 增强" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.JianJi.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <include android:id="@+id/rowRoot" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowRootScan" layout="@layout/item_profile_row" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Hook 模块（LSPosed）：状态 + 常驻开关 + 自测 + 诊断 -->
+            <TextView
+                style="@style/JianJiSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="Hook 模块（LSPosed）" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.JianJi.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <include android:id="@+id/rowHookStatus" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowHookGuard" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowHookTest" layout="@layout/item_profile_row" />
+                    <include android:id="@+id/rowHookDiag" layout="@layout/item_profile_row" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
