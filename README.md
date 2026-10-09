@@ -1,0 +1,172 @@
+# 简记 JianJi
+
+**离线优先的 Android 自动记账应用**：把微信 / 支付宝 / 银行 / 购物 / 外卖的支付通知**自动变成账本**，
+支持无障碍、LSPosed Hook、通知使用权、root 四条采集通道，数据只存在本机、**不联网、不上传、无遥测**。
+
+[!\[CI](https://github.com/EMIRIA2333/JianJi/actions/workflows/ci.yml/badge.svg)](https://github.com/EMIRIA2333/JianJi/actions/workflows/ci.yml)
+!\[License](https://img.shields.io/badge/License-GPLv3-blue.svg)
+!\[Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen.svg)
+!\[minSdk](https://img.shields.io/badge/minSdk-26-orange.svg)
+!\[No Internet](https://img.shields.io/badge/Internet-None-success.svg)
+
+> 📷 \\\*\\\*截图待补充\\\*\\\*：请见 \\\[`docs/screenshots/`](docs/screenshots/)（欢迎 PR，\\\*\\\*必须使用假数据\\\*\\\*，
+> 不要出现真实商户名、金额、学校/单位名）。
+
+\---
+
+## 为什么值得一看（技术点）
+
+|亮点|说明|
+|-|-|
+|**四条采集通道，一个记账管道**|无障碍事件、LSPosed Hook、通知使用权、root `dumpsys notification` 四个来源全部汇聚到 `NotifyPipe`，**同一条通知只记一次**（通知指纹去重，带通知时间戳，所以同金额的真实第二笔不会丢）|
+|**双格式 Xposed 模块**|同时支持传统格式（`assets/xposed\\\_init` + `IXposedHookLoadPackage`）与现代格式（`META-INF/xposed/\\\*` + `io.github.libxposed.api`）；Hook 侧**刻意不引用任何应用类**，只用 `android.\\\*` 与框架 API，避免"某个类初始化失败导致整个模块被静默跳过"|
+|**零联网**|Manifest 里**没有 `INTERNET` 权限** —— 不联网不是承诺，是权限层面的事实|
+|**统一门控 `RuntimePolicy`**|总开关 / 无障碍 / 各功能开关任一不满足，对应后台工作一律不跑（"没开的功能，其附属功能也不开"，这是为了省电专门重构的）|
+|**分类学习（可解释）**|从"你手动改过的分类"中学习，匹配维度是**商户 / 备注 / 金额档**三维度，打分规则（完全相同 100 / 包含 80 / 二元组相似 ≤70，低于阈值 62 一律不套用）—— 宁可不套，也不乱套|
+|**自带运行日志 + 崩溃捕获**|崩溃堆栈会写到系统「下载/简记」，**应用打不开也能取出来发 issue**；还有"安全模式"：上次启动没进主界面，本次自动跳过可选功能|
+|**244 个纯 JVM 单元测试**|解析器、去重、门控、学习、预算、CSV/XLSX 全部可离线测试；含"**应用侧平台表 ↔ Hook 接管名单**"双向一致性测试（这个测试抓出过真实事故）|
+
+\---
+
+## 功能
+
+* **自动记账**：识别支付/收款通知与账单页，自动写入金额、方向、分类、支付方式、时间
+* **四种确认模式**：免密自动记 / 弹出确认卡片 / 悬浮窗当场改 / 只记录待确认
+* **72 个平台适配**：微信、支付宝、云闪付、数字人民币 + 22 家银行 + 16 个购物平台 + 外卖餐饮/出行/影音
+* **银行短信解析**：`95xxx` 短号与 106 通道，带"银行语境"校验（尾号/储蓄卡/信用卡/银行名），避免把营销短信当交易
+* **分类学习**：你改过一次分类，之后相似账单自动套用（仍可随时再改）
+* **自定义分类**、标签、备注、商户名称、支付方式
+* **统计**：按年 / 按月 / 自定义区间；支出占比扇形 + 分类排行（点分类进独立账单页）；**按天查看**（跟随所选月份，点某天就地展开明细）
+* **明细页**：近 7 日柱状图（**点标题切换支出/收入**；短按柱子跳到当天最后一条并**居中**；长按看当天明细）、一键回到最上方
+* **预算**：每月或自定义周期，带进度与提醒
+* **回收站**：删除进回收站，可还原或彻底删除
+* **导入导出**：CSV / XLSX（含账单页截图批量补齐）
+* **主题与外观**：跟随系统 / 纯白 / **纯黑（AMOLED）**；**全局毛玻璃**（除背景图外全部半透明，配色跟随主题）
+* **隐私**：金额隐藏、通知不显示金额、最近任务隐藏预览
+
+\---
+
+## 架构
+
+```
+                    ┌──────────────────────────────────────────────┐
+   支付通知 / 账单页  │              采集层（四选一或并存）              │
+                    │  ① 无障碍服务 AutoCaptureService              │
+                    │  ② LSPosed 模块（system\\\_server + 应用进程）    │
+                    │  ③ NotificationListenerService               │
+                    │  ④ root: dumpsys notification --noredact     │
+                    └───────────────────────┬──────────────────────┘
+                                            ▼
+                    ┌──────────────────────────────────────────────┐
+                    │  NotifyPipe（唯一记账管道）                     │
+                    │  通知指纹去重 → 解析 → 分类学习 → 决策           │
+                    └───────────────────────┬──────────────────────┘
+                                            ▼
+        ┌───────────────────────┬───────────────────────┬────────────────────┐
+        │ RecordWriter + SQLite │ RecordPolicy          │ CategoryLearner    │
+        │ (jianji.db, 无 ORM)    │ 直接保存 / 询问确认       │ 商户·备注·金额三维度 │
+        └───────────────────────┴───────────────────────┴────────────────────┘
+```
+
+* **单工作线程 + 背压**：所有数据库/解析在一条 `MIN\\\_PRIORITY` 线程串行执行，队列积压超限时调用方主动放弃（省电、省内存）
+* **门控**：`RuntimePolicy` 统一决定"现在应该跑哪些后台工作"，`BackgroundWork` 是唯一的服务启停入口
+* 详见 [ARCHITECTURE.md](ARCHITECTURE.md)
+
+\---
+
+## 安装
+
+> 三种模式，按需选择。\\\*\\\*只需记账\\\*\\\*用模式 A；\\\*\\\*想免无障碍、靠 Hook 直读通知\\\*\\\*用模式 B。
+
+|模式|需要什么|说明|
+|-|-|-|
+|**A. 无障碍**|无障碍服务（+ 通知使用权可选）|最通用，无需 root|
+|**B. + LSPosed Hook**|LSPosed（Zygisk）/ root 或 KernelSU|在 LSPosed 里启用「简记」，**作用域全选**（含系统框架 + 微信/支付宝/银行等）|
+|**C. + root**|root|可用 `dumpsys notification` 兜底读通知、自动恢复被系统关闭的无障碍|
+
+1. 下载 [Releases](https://github.com/EMIRIA2333/JianJi/releases) 里的 APK 安装；
+2. 打开应用 → 「我的 → 稳定性」按提示授予权限；
+3. 模式 B 用户：LSPosed → 模块 → 简记 → 勾选**推荐应用**（已内置 81 项作用域）→ 重启微信/支付宝。
+
+> \\\*\\\*签名说明\\\*\\\*：Releases 的 APK 与本仓库自编译的 APK 签名不同，\\\*\\\*不能互相覆盖安装\\\*\\\*；换签名前请先导出数据。
+> 升级安装请\\\*\\\*始终使用同一来源\\\*\\\*的 APK。
+
+\---
+
+## 权限说明（每个权限只做一件事）
+
+|权限|用途|不给会怎样|
+|-|-|-|
+|无障碍服务|读取支付页/账单页文字，识别支付|只能靠 Hook 或通知使用权|
+|通知使用权|读取通知栏里的支付通知|少一条采集通道|
+|`RECEIVE\\\_SMS` / `READ\\\_SMS`|解析银行收支短信|银行短信记账不可用|
+|`POST\\\_NOTIFICATIONS`|记账结果提醒、确认卡片|无提醒（仍会记账）|
+|`SYSTEM\\\_ALERT\\\_WINDOW`|支付页上浮现确认卡片|改为发通知确认|
+|`FOREGROUND\\\_SERVICE`|「保持后台常驻」时让 Hook 通知能送达|关掉应用后可能漏记|
+|`RECEIVE\\\_BOOT\\\_COMPLETED`|开机后恢复后台工作|重启后需手动打开一次|
+|`WRITE\\\_SECURE\\\_SETTINGS`（可选）|无障碍被系统关闭后自动恢复|需手动去设置里再打开|
+
+**没有 `INTERNET` 权限**：应用在技术上无法联网。所有解析、学习、统计都在本机完成。
+
+\---
+
+## 常见问题
+
+完整排障见 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)，这里列最常被问到的：
+
+* **为什么不记账？** 先看「自动记账设置 → 识别记录」，它会说明"识别到了什么、为什么没记"；再看「Hook 模块」状态与「运行日志」。
+* **Hook 显示未生效，但 LSPosed 日志里明明有 `\\\[简记]`？** 说明模块在工作，只是心跳没送到。本项目的状态判定已改为"**任何来自模块的广播都算存活**"，并在 `system\\\_server` 里每 5 分钟发一次周期心跳。
+* **后台被杀 / 关掉应用就不记？** 打开「保持后台常驻」，并在系统里给「自启动 + 无限制电池 + 显示在其他应用上层」。
+* **某个 App 不记账？** 项目内置 72 个平台，加新平台只需改两处并跑测试，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+\---
+
+## 构建
+
+需要 **JDK 17** + Android SDK（`compileSdk 34`）。仓库自带 Gradle Wrapper：
+
+```bash
+git clone https://github.com/EMIRIA2333/JianJi.git
+cd JianJi
+./gradlew assembleDebug          # 产物在 app/build/outputs/apk/debug/
+./gradlew test                   # 244 个单元测试（纯 JVM，无需设备）
+./gradlew lintDebug              # 期望 0 error
+```
+
+* 若构建目录被占用/只读，可指定别的目录：`./gradlew assembleDebug -Pjianji.buildDir=build-out`
+* 发布包请使用**你自己的签名**（`app/build.gradle.kts` 里加 `signingConfigs`），不要提交 `\\\*.jks`
+* `xposed-stubs/` 是 **compileOnly** 的编译期空壳（手写，不含 Xposed/LSPosed 源码），不会打进 APK
+
+\---
+
+## 免责声明（请务必阅读）
+
+* 本项目为**个人学习与技术研究**作品，**仅供本机自用**。
+* 项目通过**系统公开接口**（通知服务、无障碍、通知监听、`dumpsys`）读取信息，**不包含**任何第三方应用的代码、资源或商标素材，也**不对任何第三方应用进行修改或破解**。
+* 使用 Hook / root 功能可能与部分应用的用户协议冲突，**请自行评估并承担风险**；请勿用于任何商业用途或侵犯他人权益的场景。
+* 本项目**不提供**任何绕过支付、破解、伪造数据的能力，也不接受此类需求。
+* 软件按 GPL-3.0 "**按原样**"提供，作者不对数据丢失、记账错误或任何后果负责 —— **账本数据请自行备份**。
+
+\---
+
+## 开源协议
+
+[GNU General Public License v3.0](LICENSE)。第三方组件声明见 [NOTICE](NOTICE)。
+
+图标与内置背景图由 AI 生成，说明见 [docs/ASSETS.md](docs/ASSETS.md)。
+
+## 目录
+
+|文件|内容|
+|-|-|
+|[ARCHITECTURE.md](ARCHITECTURE.md)|架构与关键设计取舍|
+|[CHANGELOG.md](CHANGELOG.md)|版本记录（从开发日志整理）|
+|[CONTRIBUTING.md](CONTRIBUTING.md)|如何新增一个平台 / 提交 PR|
+|[PRIVACY.md](PRIVACY.md)|隐私说明（逐条权限）|
+|[SECURITY.md](SECURITY.md)|安全问题上报|
+|[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)|排障手册|
+|[docs/ASSETS.md](docs/ASSETS.md)|图标与背景图来源|
+|[docs/FILES.md](docs/FILES.md)|**文件与目录说明**（每个文件做什么）|
+
+
+
