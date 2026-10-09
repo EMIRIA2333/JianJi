@@ -3,14 +3,11 @@
 **离线优先的 Android 自动记账应用**：把微信 / 支付宝 / 银行 / 购物 / 外卖的支付通知**自动变成账本**，
 支持无障碍、LSPosed Hook、通知使用权、root 四条采集通道，数据只存在本机、**不联网、不上传、无遥测**。
 
-[!\[CI](https://github.com/EMIRIA2333/JianJi/actions/workflows/ci.yml/badge.svg)](https://github.com/EMIRIA2333/JianJi/actions/workflows/ci.yml)
-!\[License](https://img.shields.io/badge/License-GPLv3-blue.svg)
-!\[Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen.svg)
-!\[minSdk](https://img.shields.io/badge/minSdk-26-orange.svg)
-!\[No Internet](https://img.shields.io/badge/Internet-None-success.svg)
-
-> 📷 \\\*\\\*截图待补充\\\*\\\*：请见 \\\[`docs/screenshots/`](docs/screenshots/)（欢迎 PR，\\\*\\\*必须使用假数据\\\*\\\*，
-> 不要出现真实商户名、金额、学校/单位名）。
+[CI](https://github.com/EMIRIA2333/JianJi/actions/workflows/ci.yml/badge.svg)](https://github.com/EMIRIA2333/JianJi/actions/workflows/ci.yml)
+[License](https://img.shields.io/badge/License-GPLv3-blue.svg)
+[Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen.svg)
+[minSdk](https://img.shields.io/badge/minSdk-26-orange.svg)
+[No Internet](https://img.shields.io/badge/Internet-None-success.svg)
 
 \---
 
