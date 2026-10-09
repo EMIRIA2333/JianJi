@@ -1,0 +1,55 @@
+name: Bug 反馈
+description: 记账不对 / 不记账 / 闪退 / 界面异常
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先看 [排障手册](https://github.com/EMIRIA2333/JianJi/blob/main/docs/TROUBLESHOOTING.md)，
+        90% 的问题用「运行日志」就能定位。**请务必附上日志**。
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象
+      description: 发生了什么？期望是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: 例如：微信零钱支付 0.01 元 → 通知出现 → 应用里没有记录
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: 运行日志
+      description: 「我的 → 稳定性 → 运行日志 → 保存到下载」，把 `下载/简记/` 里的文件内容贴进来（日志不含金额与商户）
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 机型 / ROM / Android 版本
+      placeholder: 例如 小米 14 / HyperOS 2.0 / Android 16
+    validations:
+      required: true
+  - type: dropdown
+    id: channels
+    attributes:
+      label: 你用哪些采集方式
+      multiple: true
+      options:
+        - 无障碍
+        - 通知使用权
+        - LSPosed Hook
+        - root
+  - type: input
+    id: version
+    attributes:
+      label: 简记版本
+      placeholder: 例如 3.15.3（在「我的」页底部可看到）
+    validations:
+      required: true
