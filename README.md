@@ -9,10 +9,6 @@
 ![minSdk](https://img.shields.io/badge/minSdk-26-orange.svg)
 ![No Internet](https://img.shields.io/badge/Internet-None-success.svg)
 
-> 📷 **截图待补充**：请见 [`docs/screenshots/`](docs/screenshots/)（欢迎 PR，**必须使用假数据**，
-> 不要出现真实商户名、金额、学校/单位名）。
-
----
 
 ## 为什么值得一看（技术点）
 
