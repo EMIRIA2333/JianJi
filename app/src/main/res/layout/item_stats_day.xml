@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/rowDay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingVertical="11dp">
+
+        <ImageView
+            android:id="@+id/ivDayIcon"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/circle_soft_bg"
+            android:contentDescription="日期"
+            android:padding="6dp"
+            android:src="@drawable/ic_calendar"
+            app:tint="@color/primary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvDayDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="10月07日"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvDayWeek"
+                style="@style/JianJiCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="星期三 · 3 笔" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.4"
+            android:gravity="end"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvDayExpense"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/expense_red"
+                android:textSize="13sp"
+                android:text="支出 ¥88.00" />
+
+            <TextView
+                android:id="@+id/tvDayIncome"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/income_green"
+                android:textSize="12sp"
+                android:visibility="gone"
+                android:text="收入 ¥20.00" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivDayArrow"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="展开"
+            android:padding="3dp"
+            android:src="@drawable/ic_chevron_down"
+            app:tint="@color/text_secondary" />
+    </LinearLayout>
+
+    <!-- 展开区：就在这一条**下面**展开（不会再跑到最下面） -->
+    <LinearLayout
+        android:id="@+id/llDayExpand"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="40dp"
+        android:paddingEnd="0dp"
+        android:visibility="gone" />
+</LinearLayout>

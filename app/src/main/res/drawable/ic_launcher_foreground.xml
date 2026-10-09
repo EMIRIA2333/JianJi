@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  新图标：前景层（铅笔 + 账本线 + 墨点）。
+  原图是 512 的画布；这里把整幅按 0.135 缩放并居中到 108 视图里，
+  正好落在自适应图标的安全区内（约 69dp），不会被各种圆形/方形遮罩切掉。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.135"
+        android:scaleY="0.135"
+        android:translateX="-202"
+        android:translateY="-202">
+
+        <!-- 已写出的账本线 -->
+        <path
+            android:pathData="M108,396 L248,396"
+            android:strokeColor="#2B3A55"
+            android:strokeWidth="16"
+            android:strokeLineCap="round" />
+
+        <!-- 铅笔（整体右倾 28°） -->
+        <group
+            android:translateX="348"
+            android:translateY="252"
+            android:rotation="28">
+
+            <!-- 笔身 -->
+            <path
+                android:pathData="M-10,-180 h20 a4,4 0 0 1 4,4 v202 a4,4 0 0 1 -4,4 h-20 a4,4 0 0 1 -4,-4 v-202 a4,4 0 0 1 4,-4 z"
+                android:fillColor="#3A3A3A" />
+            <!-- 左侧高光 -->
+            <path
+                android:pathData="M-9,-174 h4 v198 h-4 z"
+                android:fillColor="#805E5E5E" />
+            <!-- 右侧暗条 -->
+            <path
+                android:pathData="M5,-174 h3 v198 h-3 z"
+                android:fillColor="#66111111" />
+
+            <!-- 笔尾金属箍 -->
+            <path
+                android:pathData="M-10,-180 h20 a4,4 0 0 1 4,4 v12 a4,4 0 0 1 -4,4 h-20 a4,4 0 0 1 -4,-4 v-12 a4,4 0 0 1 4,-4 z"
+                android:fillColor="#B0B0B0" />
+            <path
+                android:pathData="M-14,-163 h28 v4 h-28 z"
+                android:fillColor="#CCD6D6D6" />
+            <!-- 橡皮 -->
+            <path
+                android:pathData="M-4,-176 h8 a5,5 0 0 1 5,5 a5,5 0 0 1 -5,5 h-8 a5,5 0 0 1 -5,-5 a5,5 0 0 1 5,-5 z"
+                android:fillColor="#F4A6B4" />
+
+            <!-- 木质笔尖 -->
+            <path
+                android:pathData="M-14,30 L0,78 L14,30 z"
+                android:fillColor="#EFD3A3" />
+            <path
+                android:pathData="M-9,36 L-1,70"
+                android:strokeColor="#80C9A96E"
+                android:strokeWidth="1.5" />
+            <path
+                android:pathData="M9,36 L1,70"
+                android:strokeColor="#80C9A96E"
+                android:strokeWidth="1.5" />
+
+            <!-- 石墨芯 -->
+            <path
+                android:pathData="M-5,64 L0,78 L5,64 z"
+                android:fillColor="#1A1A1A" />
+        </group>
+
+        <!-- 笔尖书写处的墨点 -->
+        <path
+            android:pathData="M256,390 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0 z"
+            android:fillColor="#E62B3A55" />
+        <path
+            android:pathData="M274.5,384 a3.5,3.5 0 1 0 7,0 a3.5,3.5 0 1 0 -7,0 z"
+            android:fillColor="#802B3A55" />
+        <path
+            android:pathData="M290,379 a2,2 0 1 0 4,0 a2,2 0 1 0 -4,0 z"
+            android:fillColor="#4D2B3A55" />
+    </group>
+</vector>

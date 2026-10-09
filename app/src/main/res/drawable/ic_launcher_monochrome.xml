@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 单色层（Android 13+ 主题图标）：只用单一颜色描出铅笔与账本线，系统会自行上色 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.135"
+        android:scaleY="0.135"
+        android:translateX="-202"
+        android:translateY="-202">
+
+        <path
+            android:pathData="M108,396 L248,396"
+            android:strokeColor="#000000"
+            android:strokeWidth="16"
+            android:strokeLineCap="round" />
+
+        <group
+            android:translateX="348"
+            android:translateY="252"
+            android:rotation="28">
+            <path
+                android:pathData="M-10,-180 h20 a4,4 0 0 1 4,4 v202 a4,4 0 0 1 -4,4 h-20 a4,4 0 0 1 -4,-4 v-202 a4,4 0 0 1 4,-4 z"
+                android:fillColor="#000000" />
+            <path
+                android:pathData="M-14,30 L0,78 L14,30 z"
+                android:fillColor="#000000" />
+        </group>
+    </group>
+</vector>

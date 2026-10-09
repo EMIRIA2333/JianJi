@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">简记</string>
+    <string name="accessibility_service_label">简记 · 自动记账</string>
+    <string name="accessibility_service_desc">开启后，简记会在你使用微信、支付宝及主流购物平台完成支付/收款时，读取支付通知与支付成功页面，自动记录金额、分类和时间；点进支付消息也可识别入账。所有数据仅保存在本机，不联网、不上传。</string>
+    <string name="xposed_desc">简记 · 自动记账（LSPosed 模块）：在微信 / 支付宝进程内直接读取支付通知内容并转发给简记记账，无需无障碍与通知读取权限；只读通知参数、不改返回值，数据仅存本机。</string>
+    <string name="settings">设置</string>
+    <string name="month_expense">本月支出</string>
+    <string name="month_income">本月收入</string>
+    <string name="balance">结余</string>
+    <string name="empty_records">本月还没有账单\n点右下角 + 记一笔，或开启自动记账</string>
+    <string name="add_title">记一笔</string>
+    <string name="expense">支出</string>
+    <string name="income">收入</string>
+    <string name="amount_hint">金额</string>
+    <string name="note_hint">备注（可选）</string>
+    <string name="save">保存</string>
+    <string name="auto_switch">自动记账（无障碍）</string>
+    <string name="sms_switch">短信记账（银行支付短信）</string>
+    <string name="go_accessibility">前往开启无障碍服务</string>
+    <string name="request_sms">申请短信权限</string>
+    <string name="request_notify">申请通知权限（提醒更及时）</string>
+    <string name="export_csv">导出账单（CSV）</string>
+    <string name="import_csv">导入账单（CSV）</string>
+    <string name="clear_all">清空全部记录</string>
+    <string name="a11y_status_on">无障碍服务：已开启</string>
+    <string name="a11y_status_off">无障碍服务：未开启</string>
+    <string name="help_text">使用说明\n\n1. 自动记账：在「我的」页开启无障碍服务「简记 · 自动记账」，用微信/支付宝或美团、京东、淘宝、拼多多、滴滴等平台付款收款后会自动识别并提醒。\n2. 一键确认：识别到支付后会弹出「保存 / 修改」提醒（或直接在支付页面上浮出卡片，可当场改分类），点「保存」直接入账。\n3. 点进账单也能记：打开微信/支付宝的账单详情页、零钱明细页会自动识别金额、商户、分类、支付方式与支付时间。\n4. 转账与红包：聊天里的转账/红包气泡会按「已被接收 / 已收款 / 已被领取 / 你领取了」逐笔判定收支方向，不会记反。\n5. 相似账单：检测到与近期账单疑似重复（如通知+页面各一次）时，弹出「忽略 / 继续记录」由你决定。\n6. 短信记账：授予短信权限后，银行扣款/入账/退款短信会自动入账；验证码、营销类短信不会记录。\n7. 预算：可在「预算与预警」中设置额度与周期（每月或自定义时间段，例如按发薪日 10-05 ~ 11-04），达到 80% 与超支时各提醒一次。\n8. 统计：明细页顶部或「统计」页可查看按月、按年（12 个月快捷跳转）、自定义区间以及按天查看的收支与分类占比。\n9. 编辑与批量：点击账单进入编辑页；长按可多选，批量改分类、改时间、加标签或删除。删除先进回收站，可还原或彻底删除。\n10. 搜索：支持按备注、分类、标签、支付方式、金额区间与时间区间组合查询。\n11. 备份：支持 CSV 与 Excel 导入导出（导入自动跳过重复记录）。\n\n运行稳定性：「我的 → 运行稳定性」可检查无障碍是否被系统关闭（会每天提醒一次）、跳转自启动与电池优化设置。\n省电：无轮询、无常驻进程、无唤醒锁，不联网；息屏不扫描页面，空闲时自动降低扫描频率，可在「我的 → 自动记账 → 省电模式」调整。\n所有数据仅保存在本机。</string>
+    <string name="version_info">简记 2.6.0 · 数据仅存本机</string>
+</resources>

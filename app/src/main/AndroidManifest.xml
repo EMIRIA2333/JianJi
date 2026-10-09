@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 自动记账成功后发出本地提醒（不联网、不采集任何数据） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 短信记账：实时接收银行支付短信（仅解析，不上传；可随时关闭） -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+
+    <!-- root 自动读通知栏用的前台服务（用户主动开启才运行，息屏不工作） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 开机自启守护服务（减少「被系统清理后不记账」） -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 短信权限不代表必须有电话硬件（平板/ChromeOS 也能安装使用其他功能） -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
+    <!-- 悬浮窗权限（可选）：开启后悬浮记账卡片在部分机型上显示更稳定。
+         不开启也能正常用 —— 默认走无障碍悬浮窗，不需要这个权限 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 「高级修复」：只有通过 ADB 手动授权后才会拿到（普通安装不会自动获得）。
+         授权后应用可以在无障碍被系统关闭时**自动重新开启**，无需用户手动操作 -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <application
+        android:name=".App"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.JianJi">
+
+        <!-- ================= LSPosed / Xposed 模块声明 =================
+             本 APK 是双用途的：不装 LSPosed 时就是普通自动记账应用；
+             装进 LSPosed 并勾选微信/支付宝后，模块会在它们的进程里 hook
+             NotificationManager.notify，把通知内容直读过来（不需要无障碍与通知读取权限）。
+             模块只 hook 应用进程、只读参数、不改返回值，不会影响宿主应用。 -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="@string/xposed_desc" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="82" />
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposed_scope" />
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.AddRecordActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.EditRecordActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.SearchActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- 回收站：还原 / 彻底删除 -->
+        <activity
+            android:name=".ui.TrashActivity"
+            android:exported="false" />
+
+        <!-- 二级设置页：自动记账选项 -->
+        <activity
+            android:name=".ui.AutoCaptureSettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.MainActivity" />
+
+        <activity
+            android:name=".ui.ConfirmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.JianJi" />
+
+        <!-- 无障碍服务：仅监听已适配应用（微信/支付宝/主流购物平台）的通知与页面切换 -->
+        <service
+            android:name=".service.AutoCaptureService"
+            android:exported="false"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 通知读取：不弹横幅、只在通知栏里的免密支付也能记账（需用户授予「通知使用权」） -->
+        <service
+            android:name=".service.NotifyListenerService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- 开机自启：拉起守护服务，减少「被系统清理后不记账」 -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 接收 Hook 模块（LSPosed）转发来的通知内容：显式广播 + token 校验 -->
+        <receiver
+            android:name=".service.HookBridgeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.jianji.app.HOOK_BRIDGE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- root 自动读通知栏（前台服务）：LSPosed 用不了 / 无障碍被系统杀掉时的兜底通道 -->
+        <service
+            android:name=".service.RootScanService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Hook 直读守护（前台服务）：让进程常驻，保证 Hook 广播随时能送达 -->
+        <service
+            android:name=".service.HookGuardService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- 短信记账：受保护系统广播 SMS_RECEIVED，第三方无法伪造 -->
+        <receiver
+            android:name=".service.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 通知按钮：保存 / 修改 / 忽略 / 继续记录（无需打开应用） -->
+        <receiver
+            android:name=".service.RecordActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.jianji.app.action.SAVE_RECORD" />
+                <action android:name="com.jianji.app.action.FORCE_SAVE_RECORD" />
+                <action android:name="com.jianji.app.action.IGNORE_RECORD" />
+                <action android:name="com.jianji.app.action.UNDO_BILL_IMPORT" />
+            </intent-filter>
+        </receiver>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.jianji.app.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+        <activity
+            android:name=".ui.CategoryRecordsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.LogActivity"
+            android:exported="false" />
+
+    </application>
+
+</manifest>

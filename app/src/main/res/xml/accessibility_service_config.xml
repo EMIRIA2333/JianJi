@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  无障碍服务配置（省电要点）：
+  · packageNames：系统层只把已适配应用的 事件 交给本服务，其它应用零开销；
+  · notificationTimeout=400：系统按包合并事件后再投递，显著减少进程唤醒次数
+    （内容扫描本来就有 1 秒以上的间隔，合并 0.4 秒不影响识别）；
+  · 只订阅通知 / 窗口切换 / 内容变化三类事件，不做按键、手势、焦点监听。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeNotificationStateChanged|typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="true"
+    android:notificationTimeout="400"
+    android:packageNames="com.tencent.mm,com.eg.android.AlipayGphone,com.sankuai.meituan.takeoutnew,com.sankuai.meituan,me.ele,com.taobao.taobao,com.tmall.wireless,com.jingdong.app.mall,com.xunmeng.pinduoduo,com.smile.gifmaker,com.achievo.vipshop,com.suning.mobile.ebuy,com.sdu.didi.psnger,com.jingyao.easybike,com.MobileTicket,com.ctrip.android.view,com.Qunar,com.unionpay"
+    android:description="@string/accessibility_service_desc" />
