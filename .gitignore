@@ -1,0 +1,35 @@
+# ---- 构建产物 ----
+build/
+build-*/
+.gradle/
+.kotlin/
+out/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# ---- 本地环境（绝不提交） ----
+local.properties
+gradle-home/
+.gradle-user/
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# ---- IDE ----
+.idea/
+*.iml
+*.iws
+.vscode/
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+
+# ---- 其它 ----
+captures/
+.externalNativeBuild/
+.cxx/
+*.log
