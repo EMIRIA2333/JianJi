@@ -58,6 +58,8 @@ object AppLog {
             runCatching {
                 val detail = "线程 ${t.name} 未捕获异常\n${e.javaClass.name}: ${e.message}\n" + e.stackTraceToString()
                 e("崩溃", detail)
+                // 记录崩溃时间：下次启动据此进入安全模式（后台拉起的进程不会误触发）
+                runCatching { Prefs.sp(appCtx).edit().putLong(KEY_LAST_CRASH_AT, System.currentTimeMillis()).apply() }
                 writeCrashToDownloads(
                     appCtx,
                     "简记崩溃-${SimpleDateFormat("MMdd-HHmmss", Locale.US).format(Date())}.txt"
@@ -110,26 +112,34 @@ object AppLog {
     }
 
     /**
-     * **安全模式**：上次启动没走到主界面就死了 → 本次跳过毛玻璃等可选功能。
+     * **安全模式**：最近启动时**真的崩溃过** → 本次跳过毛玻璃等可选功能。
      *
-     * 目的：万一某个可选特性导致启动崩溃，用户至少还能打开应用（而不是永远打不开）。
-     * 主界面第一次 onResume 会清掉这个标记。
+     * ⚠️ 曾经的做法是"上次启动没走到主界面就当崩溃"——但简记的进程**经常被后台拉起**
+     * （Hook 广播、通知动作、短信、开机…），这些启动永远不会进主界面，于是每次都被判成
+     * "上次崩了"，安全模式**永久生效**：日志里连续 4 次「安全模式」就是这么来的，
+     * 表现就是"毛玻璃开关是开的，但界面一点玻璃效果都没有"。
+     *
+     * 现在改成**只看崩溃处理器是否真的写过崩溃时间**，主界面成功启动后清除。
+     * 这样：真崩了 → 下次启动降级可选功能；只是后台启动 → 完全不打扰。
      */
     fun enterSafeModeIfLastCrash(ctx: Context): Boolean {
-        val crashed = runCatching { Prefs.sp(ctx).getBoolean(KEY_LAST_RUN_OK, true).not() }.getOrDefault(false)
-        runCatching { Prefs.sp(ctx).edit().putBoolean(KEY_LAST_RUN_OK, false).apply() }
-        if (crashed) {
-            i("安全模式", "检测到上次启动未进入主界面 → 本次关闭毛玻璃等可选功能")
+        val at = runCatching { Prefs.sp(ctx).getLong(KEY_LAST_CRASH_AT, 0L) }.getOrDefault(0L)
+        val recent = at > 0 && System.currentTimeMillis() - at < CRASH_SAFE_WINDOW_MS
+        if (recent) {
+            i("安全模式", "最近 24 小时内启动崩溃过 → 本次关闭毛玻璃等可选功能")
         }
-        return crashed
+        return recent
     }
 
-    /** 主界面起来了：标记本次启动正常 */
+    /** 主界面起来了：清除崩溃标记，下次启动不再降级 */
     fun markRunOk(ctx: Context) {
-        runCatching { Prefs.sp(ctx).edit().putBoolean(KEY_LAST_RUN_OK, true).apply() }
+        runCatching { Prefs.sp(ctx).edit().putLong(KEY_LAST_CRASH_AT, 0L).apply() }
     }
 
-    private const val KEY_LAST_RUN_OK = "last_run_ok"
+    /** 崩溃标记有效期：超过一天就不再降级（避免一次偶发崩溃永久关掉毛玻璃） */
+    private const val CRASH_SAFE_WINDOW_MS = 24L * 60 * 60 * 1000
+
+    private const val KEY_LAST_CRASH_AT = "last_crash_at"
     fun i(tag: String, msg: String) = write("I", tag, msg)
     fun w(tag: String, msg: String) = write("W", tag, msg)
     fun e(tag: String, msg: String) = write("E", tag, msg)

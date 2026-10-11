@@ -407,6 +407,14 @@ class ProfileFragment : Fragment() {
                 switch = true,
                 initial = Prefs.isGlass(requireContext())
             ) { on ->
+                // 幂等保护：点击穿透会让"同一次点击"在界面重建后再投递一次，
+                // 结果是开→关→开→关来回翻转（真实日志里 1.5 秒翻了 4 次，最后把毛玻璃关掉）。
+                // 状态已经是目标值就直接同步 UI 返回，不写设置、不重建 → 循环立刻终止。
+                if (Prefs.isGlass(requireContext()) == on) {
+                    AppLog.i("毛玻璃", "忽略重复的开关回调（当前已是 ${if (on) "开" else "关"}）")
+                    setSwitchState(row(binding.rowGlass).swRow, on)
+                    return@configureRow
+                }
                 if (SettingsGuard.isSwitchSuppressed()) {
                     // 重建期间的误触（点击穿透）：不写设置，回到真实状态
                     AppLog.w("毛玻璃", "忽略一次开关回调（防误触窗口内，on=$on）")
@@ -415,6 +423,8 @@ class ProfileFragment : Fragment() {
                 }
                 Prefs.setGlassMode(requireContext(), if (on) 1 else 0)
                 AppLog.i("毛玻璃", "开关切换 → ${if (on) "开" else "关"}")
+                // 紧接着抑制一次开关变化：GlassHelper.apply 可能触发重建，重建期的点击穿透不许改设置
+                SettingsGuard.suppressSwitchChanges(1800)
                 BannerBackgrounds.invalidate()
                 // 当场应用到当前界面（不 recreate → 不闪退、不滚回顶部）
                 GlassHelper.apply(requireActivity())
