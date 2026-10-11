@@ -5,6 +5,7 @@ build-*/
 .kotlin/
 out/
 *.apk
+dist/
 *.aab
 *.ap_
 *.dex
