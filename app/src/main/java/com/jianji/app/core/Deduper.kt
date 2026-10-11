@@ -21,6 +21,8 @@ class Deduper(
     private val records = LinkedHashMap<String, Long>()
     private val texts = LinkedHashMap<String, Long>()
     private val pending = LinkedHashMap<String, Long>()
+    /** 跨通道去重：同方向+同金额 -> 最近一次是哪个包记的 */
+    private val cross = LinkedHashMap<String, CrossEntry>()
 
     /** 同类型+同金额+同商户（或宽松匹配）在时间窗内视为重复 */
     fun duplicate(type: Int, amount: Double, merchant: String): Boolean {
@@ -83,6 +85,47 @@ class Deduper(
         records.remove(looseKeyOf(type, amount, merchant))
     }
 
+    /**
+     * **跨通道去重**：同一笔支付常常同时产生好几条通知 ——
+     * 拼多多自己的「已自动扣款」、微信支付的「已扣费」、银行的「发生快捷支付扣款」。
+     * 它们金额相同、方向相同，但**包名不同**。
+     *
+     * 规则：同方向 + 同金额 + **不同包名** +（商户相近 或 其中一方是平台通用名）→ 视为同一笔，跳过。
+     * 同一个包名重复出现**不会**被判重（用户确实可能连续付两次同样金额）。
+     *
+     * @param windowMs 跨通道判定窗口（默认 90 秒，比同通道去重窗口短，避免误杀真实第二笔）
+     */
+    fun crossChannelDuplicate(
+        pkg: String,
+        type: Int,
+        amount: Double,
+        merchant: String,
+        windowMs: Long = CROSS_WINDOW_MS
+    ): Boolean {
+        val now = clock()
+        val it = cross.entries.iterator()
+        while (it.hasNext()) {
+            val e = it.next()
+            if (now - e.value.at > windowMs) it.remove() else break
+        }
+        val key = "$type|${amtKey(amount)}"
+        val hit = cross[key]
+        if (hit != null && hit.pkg != pkg &&
+            (isGenericMerchant(merchant) || isGenericMerchant(hit.merchant) ||
+                similarMerchant(merchant, hit.merchant))
+        ) {
+            return true
+        }
+        cross[key] = CrossEntry(pkg, merchant, now)
+        while (cross.size > 64) {
+            val first = cross.keys.firstOrNull() ?: break
+            cross.remove(first)
+        }
+        return false
+    }
+
+    private data class CrossEntry(val pkg: String, val merchant: String, val at: Long)
+
     // ---------------- 内部 ----------------
 
     private fun keyOf(type: Int, amount: Double, merchant: String): String =
@@ -139,6 +182,9 @@ class Deduper(
         private const val LOOSE_PREFIX = "L:"
 
         /** 平台通用商户名：这些名字不能作为「是否同一笔」的区分依据 */
+        /** 跨通道去重窗口：90 秒（比同通道短，避免误杀真实第二笔） */
+        const val CROSS_WINDOW_MS = 90_000L
+
         private val GENERIC_MERCHANTS = setOf(
             "微信", "微信支付", "支付宝", "支付宝支付", "支付", "云闪付", "财付通", "银联",
             "银行", "零钱", "余额", "微信支付凭证", "交易提醒"
