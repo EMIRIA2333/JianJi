@@ -161,12 +161,20 @@ class PlatformCoverageTest {
             .substringBefore("</string-array>")
         val declared = Regex("<item>([^<]+)</item>").findAll(block).map { it.groupValues[1].trim() }.toSet()
 
-        assertTrue("推荐作用域缺少系统框架，Hook 就拦不到通知", declared.contains("system"))
+        // 系统框架必须**同时**写 system 与 android：
+        // LSPosed 的「推荐应用」只列出能解析到**已安装包**的条目，而 system 不是 PackageManager 里的包，
+        // 只写 system 时推荐应用里根本看不到系统框架（真实 bug：用户问"系统框架怎么不在推荐应用里面"）；
+        // android 才是它在 PackageManager 里的真实包名（界面显示为「Android 系统」）。
+        assertTrue("推荐作用域缺少 system（LSPosed 内部伪包名）", declared.contains("system"))
+        assertTrue(
+            "推荐作用域缺少 android（系统框架的真实包名；缺了它，推荐应用里就没有「系统框架」可勾）",
+            declared.contains("android")
+        )
         com.jianji.app.hook.HookPackages.ALL.forEach { pkg ->
             assertTrue("LSPosed 推荐作用域缺少：$pkg", declared.contains(pkg))
         }
-        // 反向：作用域里不该有模块不认的包（除了 system）
-        declared.filter { it != "system" }.forEach { pkg ->
+        // 反向：作用域里不该有模块不认的包（系统框架的两种写法除外）
+        declared.filter { it != "system" && it != "android" }.forEach { pkg ->
             assertTrue("推荐作用域多出未登记的包：$pkg", com.jianji.app.hook.HookPackages.ALL.contains(pkg))
         }
     }
