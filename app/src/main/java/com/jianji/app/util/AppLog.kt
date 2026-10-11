@@ -26,6 +26,9 @@ object AppLog {
     private const val FILE_NAME = "jianji_log.txt"
     private const val TAG = "简记"
 
+    /** 日志行开头是 `MM-dd HH:mm:ss`，取前 5 个字符（MM-dd）判断"是不是今天" */
+    private val LINE_DAY = Regex("^[0-9]{2}-[0-9]{2}$")
+
     private val memory = ArrayDeque<String>()
     private val fmt = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
     @Volatile private var file: File? = null
@@ -36,6 +39,7 @@ object AppLog {
         ready = true
         runCatching { file = File(ctx.filesDir, FILE_NAME) }
         i("日志", "===== 应用启动 =====")
+        runCatching { pruneOldDays(ctx) }
         // 每一段都单独兜异常：日志本身绝不能把启动搞崩
         runCatching { i("环境", environment(ctx)) }.onFailure { e("环境", it) }
         runCatching { i("设置", settingsSnapshot(ctx)) }.onFailure { e("设置", it) }
@@ -231,6 +235,14 @@ object AppLog {
     }.onFailure { e("日志", "生成分享意图失败：${it.message}") }.getOrNull()
 
     /** 只分享**文本**（不涉及文件，任何应用都收得下，最稳） */
+    /** 分享任意文本（Hook 诊断用） */
+    fun shareTextIntentOf(ctx: Context, subject: String, text: String): android.content.Intent =
+        android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_SUBJECT, subject)
+            putExtra(android.content.Intent.EXTRA_TEXT, text)
+        }
+
     fun shareTextIntent(ctx: Context): android.content.Intent = android.content.Intent(
         android.content.Intent.ACTION_SEND
     ).apply {
@@ -252,8 +264,15 @@ object AppLog {
      *
      * @return (可分享的 URI, 人类可读位置)；失败返回 null
      */
-    fun saveToDownloads(ctx: Context, text: String): Pair<android.net.Uri?, String>? = runCatching {
-        val name = "jianji-log-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())}.txt"
+    /** 保存自定义文件名的文本到「下载/简记」（Hook 诊断导出用） */
+    fun saveToDownloadsNamed(ctx: Context, text: String, prefix: String): Pair<android.net.Uri?, String>? =
+        saveToDownloadsInternal(ctx, text, prefix)
+
+    fun saveToDownloads(ctx: Context, text: String): Pair<android.net.Uri?, String>? =
+        saveToDownloadsInternal(ctx, text, "jianji-log")
+
+    private fun saveToDownloadsInternal(ctx: Context, text: String, prefix: String): Pair<android.net.Uri?, String>? = runCatching {
+        val name = "$prefix-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())}.txt"
         if (Build.VERSION.SDK_INT >= 29) {
             val resolver = ctx.contentResolver
             val values = android.content.ContentValues().apply {
@@ -286,6 +305,35 @@ object AppLog {
     }.onFailure { e("日志", "保存到下载目录失败：${it.message}") }.getOrNull()
 
     /** 完整日志文本（导出/展示用） */
+    /**
+     * 「只保留当天」开启时，清掉日志文件里非今天的行。
+     * 日志行格式固定以 `MM-dd HH:mm:ss` 开头，因此按前缀判断即可。
+     */
+    fun pruneOldDays(ctx: Context) {
+        if (!Prefs.isLogKeepTodayOnly(ctx)) return
+        val f = file ?: return
+        if (!f.exists()) return
+        val today = SimpleDateFormat("MM-dd", Locale.US).format(Date())
+        val kept = f.readLines().filter { line ->
+            val t = line.trim()
+            // 保留非日志行（导出头、分隔线等）与今天的行
+            !LINE_DAY.matches(t.substring(0, minOf(t.length, 8))) || t.startsWith(today)
+        }
+        f.writeText(kept.joinToString("\n"))
+    }
+
+    /** 供界面显示/导出：开启「只保留当天」时只返回今天的行（含头部） */
+    fun visibleText(ctx: Context): String {
+        val all = fullText(ctx)
+        if (!Prefs.isLogKeepTodayOnly(ctx)) return all
+        val today = SimpleDateFormat("MM-dd", Locale.US).format(Date())
+        return all.lines().filter { line ->
+            val t = line.trim()
+            t.isEmpty() || t.startsWith("[") || !LINE_DAY.matches(t.substring(0, minOf(t.length, 8))) ||
+                t.startsWith(today) || t.startsWith("简记运行日志导出") || t.startsWith("---")
+        }.joinToString("\n")
+    }
+
     fun fullText(ctx: Context): String {
         val head = buildString {
             appendLine("简记运行日志导出")

@@ -34,6 +34,7 @@ object Prefs {
     private const val KEY_ROOT_SCAN_INTERVAL = "root_scan_interval"
     private const val KEY_CATEGORY_LEARNING = "category_learning"
     private const val KEY_DISCLAIMER = "disclaimer_accepted"
+    private const val KEY_LOG_KEEP_TODAY = "log_keep_today_only"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_GLASS_MODE = "glass_mode"
     private const val KEY_LAST_TAB = "last_tab"
@@ -131,6 +132,12 @@ object Prefs {
     fun isCategoryLearning(c: Context): Boolean = sp(c).getBoolean(KEY_CATEGORY_LEARNING, true)
     fun setCategoryLearning(c: Context, v: Boolean) =
         sp(c).edit().putBoolean(KEY_CATEGORY_LEARNING, v).apply()
+
+    /** 日志只保留当天（默认开）：开启后启动时清掉非今天的日志，避免日志无限增长 */
+    fun isLogKeepTodayOnly(c: Context): Boolean = sp(c).getBoolean(KEY_LOG_KEEP_TODAY, true)
+    fun setLogKeepTodayOnly(c: Context, v: Boolean) {
+        sp(c).edit().putBoolean(KEY_LOG_KEEP_TODAY, v).apply()
+    }
 
     /** 首次启动的免责声明是否已确认（开源版合规要求） */
     fun isDisclaimerAccepted(c: Context): Boolean = sp(c).getBoolean(KEY_DISCLAIMER, false)

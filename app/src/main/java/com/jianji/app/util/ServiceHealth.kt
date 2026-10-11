@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
+import com.jianji.app.core.HookProtocol
 import com.jianji.app.service.AutoCaptureService
 
 /**
@@ -172,6 +173,9 @@ object ServiceHealth {
     fun warnIfDisabled(ctx: Context) {
         if (!Prefs.isAutoEnabled(ctx)) return
         if (isAccessibilityEnabled(ctx)) return
+        // Hook 直读已生效时不再催无障碍：这时候通知照样能记，
+        // 反复提示只会让人以为出问题了（用户要求「开了 Hook 就应能完全代替无障碍」）。
+        if (HookProtocol.isActive(Prefs.hookActiveAt(ctx), System.currentTimeMillis())) return
         val now = System.currentTimeMillis()
         if (now - Prefs.serviceWarnedAt(ctx) < DAY_MS) return
         Prefs.setServiceWarnedAt(ctx, now)

@@ -19,6 +19,7 @@ package com.jianji.app.hook
 
 import android.app.Application
 import android.app.Notification
+import com.jianji.app.core.NotifyText
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -244,22 +245,12 @@ class JianJiHook : IXposedHookLoadPackage {
     // ---------------- 通知内容提取 ----------------
 
     /** 取出标题与正文；都没内容就返回 null */
-    private fun extract(n: Notification): Pair<String, String>? {
-        val extras = runCatching { n.extras }.getOrNull() ?: return null
-        val title = runCatching { extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty() }
-            .getOrDefault("")
-        val body = listOf(
-            Notification.EXTRA_BIG_TEXT,
-            Notification.EXTRA_TEXT,
-            Notification.EXTRA_SUB_TEXT
-        ).mapNotNull { key ->
-            runCatching { extras.getCharSequence(key)?.toString().orEmpty() }
-                .getOrDefault("").takeIf { it.isNotEmpty() }
-        }.joinToString("\n")
-        if (title.isBlank() && body.isBlank()) return null
-        return title to body
-    }
-
+    /**
+     * 文本抽取交给 [com.jianji.app.core.NotifyText]（含 RemoteViews 反射兜底）。
+     * 旧实现只读 EXTRA_TITLE/BIG_TEXT/TEXT/SUB_TEXT，支付宝「交易提醒」这类
+     * 自定义布局的通知会被整条丢掉 —— 表现就是"支付宝免密支付不记账"。
+     */
+    private fun extract(n: Notification): Pair<String, String>? = NotifyText.of(n)
     // ---------------- 与主程序通信 ----------------
 
     private fun sendHello(ctx: Context, pkg: String, stage: String) {

@@ -3,6 +3,7 @@ package com.jianji.app.service
 import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.jianji.app.core.NotifyText
 import com.jianji.app.core.PaymentParser
 import com.jianji.app.util.Prefs
 import com.jianji.app.util.RecognitionLog
@@ -34,13 +35,9 @@ class NotifyListenerService : NotificationListenerService() {
 
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_ONGOING_EVENT != 0) return
-        val extras = n.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val text = listOfNotNull(
-            extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
-            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
-            extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
-        ).joinToString("\n")
+        // 统一走 NotifyText（含 RemoteViews 兜底），否则自定义布局的通知会整条丢掉
+        val pair = NotifyText.of(n) ?: return
+        val (title, text) = pair
         if (title.isBlank() && text.isBlank()) return
 
         NotifyPipe.handle(this, pkg, title, text, "通知读取", sbn.postTime)

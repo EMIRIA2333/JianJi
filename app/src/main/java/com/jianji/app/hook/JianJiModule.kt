@@ -18,6 +18,7 @@
 package com.jianji.app.hook
 
 import android.app.Notification
+import com.jianji.app.core.NotifyText
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -183,19 +184,8 @@ class JianJiModule : XposedModule() {
 
     // ---------------- 通知内容提取 ----------------
 
-    private fun extract(n: Notification): Pair<String, String>? {
-        val extras = runCatching { n.extras }.getOrNull() ?: return null
-        val title = runCatching { extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty() }
-            .getOrDefault("")
-        val body = listOf(
-            Notification.EXTRA_BIG_TEXT, Notification.EXTRA_TEXT, Notification.EXTRA_SUB_TEXT
-        ).mapNotNull { key ->
-            runCatching { extras.getCharSequence(key)?.toString().orEmpty() }
-                .getOrDefault("").takeIf { it.isNotEmpty() }
-        }.joinToString("\n")
-        if (title.isBlank() && body.isBlank()) return null
-        return title to body
-    }
+    private fun extract(n: Notification): Pair<String, String>? = NotifyText.of(n)
+
 
     // ---------------- 与主程序通信 ----------------
 
