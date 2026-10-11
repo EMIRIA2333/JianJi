@@ -270,6 +270,39 @@ object Notifier {
         }
     }
 
+    /**
+     * 「Hook 已加载，但一条通知都收不到」提醒。
+     *
+     * 真实案例：模块心跳正常（LSPosed 日志里能看到 `[简记] 应用进程 hook 已接入`），
+     * 但整段日志里 `[Hook]` 通道 0 条、支付宝/微信的通知全被漏掉。
+     * 原因通常是作用域没勾「系统框架」／目标应用没重启 —— 光看"已生效"是看不出来的。
+     */
+    fun notifyHookSilent(c: Context) {
+        main.post {
+            ensureChannel(c)
+            if (!canNotify(c)) return@post
+            val n = NotificationCompat.Builder(c, CHANNEL_CONFIRM)
+                .setSmallIcon(R.drawable.ic_stat_record)
+                .setContentTitle("简记 · Hook 收不到通知")
+                .setContentText("模块已加载但没有转发任何通知，点开看怎么修")
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(
+                            "Hook 模块已经加载（心跳正常），但一条通知都没有转发过来 ——\n\n" +
+                                "1. LSPosed → 模块 → 简记 → **作用域**里勾上「系统框架」+ 微信 + 支付宝" +
+                                "（点「推荐应用」可一键全选）；\n" +
+                                "2. 勾完必须**重启手机**（或强制停止并重新打开对应应用），" +
+                                "已经运行中的进程不会自动加载新代码；\n" +
+                                "3. 兜底方案：打开「自动记账设置 → root 扫描」，这样即使 Hook 失灵也不会漏记。"
+                        )
+                )
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            post(c, SERVICE_OFF_ID + 2, n)
+        }
+    }
+
     /** 主线程安全：内部已切换到主线程 */
     fun notifyRecord(c: Context, r: Record, merchant: String) {
         main.post {

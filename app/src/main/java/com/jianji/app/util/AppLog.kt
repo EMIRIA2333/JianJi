@@ -212,27 +212,38 @@ object AppLog {
      * 再分享那个 **系统媒体 URI**（`content://media/...`）—— 由系统进程提供，
      * 简记被杀也不影响，而且任何应用都能读。取不到媒体库时再退回 FileProvider。
      */
-    fun shareFileIntent(ctx: Context): android.content.Intent? = runCatching {
-        val text = fullText(ctx)
-        val saved = saveToDownloads(ctx, text)
+    fun shareFileIntent(ctx: Context): android.content.Intent? =
+        shareFileIntentOf(ctx, fullText(ctx), "jianji-log", "简记运行日志")
+
+    /**
+     * 分享**任意文本为文件**（Hook 诊断用）。
+     *
+     * 与运行日志完全一致的做法：先写进系统媒体库「下载/简记」，
+     * 再分享**系统媒体 URI** —— 简记被杀也能读，任何应用都收得下。
+     */
+    fun shareFileIntentOf(
+        ctx: Context,
+        text: String,
+        prefix: String,
+        subject: String
+    ): android.content.Intent? = runCatching {
+        val saved = saveToDownloadsNamed(ctx, text, prefix)
         val uri = saved?.first
             ?: export(ctx)?.let {
                 androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", it)
             }
             ?: return null
-        // 只放一小段正文做兜底（完整的在附件里），避免超大文本把意图撑坏
-        val preview = text.takeLast(1500)
         val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(android.content.Intent.EXTRA_STREAM, uri)
-            putExtra(android.content.Intent.EXTRA_SUBJECT, "简记运行日志")
-            putExtra(android.content.Intent.EXTRA_TITLE, "简记运行日志")
-            putExtra(android.content.Intent.EXTRA_TEXT, preview)
-            clipData = android.content.ClipData.newUri(ctx.contentResolver, "简记日志", uri)
+            putExtra(android.content.Intent.EXTRA_SUBJECT, subject)
+            putExtra(android.content.Intent.EXTRA_TITLE, subject)
+            putExtra(android.content.Intent.EXTRA_TEXT, text.takeLast(1500))
+            clipData = android.content.ClipData.newUri(ctx.contentResolver, subject, uri)
             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        i("日志", "分享文件：uri=$uri（保存位置=${saved?.second ?: "FileProvider"}）")
-        android.content.Intent.createChooser(send, "分享日志").apply {
+        i("日志", "分享文件($subject)：uri=$uri（保存位置=${saved?.second ?: "FileProvider"}）")
+        android.content.Intent.createChooser(send, "分享$subject").apply {
             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }.onFailure { e("日志", "生成分享意图失败：${it.message}") }.getOrNull()
