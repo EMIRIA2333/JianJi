@@ -41,7 +41,10 @@ object NotifyPipe {
             val parsed = PaymentParser.parse(pkg, title, text, strict = false)
             if (parsed == null) {
                 if (ScanPolicy.looksInteresting(text) && text.length > 4) {
-                    RecognitionLog.add("${PaymentParser.platformName(pkg)} 通知($via)未识别：${text.take(40)}")
+                    RecognitionLog.add(
+                    "${PaymentParser.platformName(pkg)} 通知($via)未识别" +
+                        "（${PaymentParser.lastRejectReason.ifBlank { "原因未知" }}）：${text.take(40)}"
+                )
                 }
                 return@post
             }
@@ -68,6 +71,16 @@ object NotifyPipe {
                 "${PaymentParser.platformName(pkg)} 通知($via) → " +
                     "${if (record.type == RecordType.INCOME) "收入" else "支出"} ${Money.plain(record.amount)} · ${record.displayName}"
             )
+
+            // **同一笔支付只记一次**：拼多多「已自动扣款」+ 微信「已扣费」+ 银行「快捷支付扣款」
+            // 是三条**不同包名**的通知，金额与方向相同 —— 以前会各记一笔。
+            // 判定要求"不同包名 + 同金额 + 商户相近或含平台通用名"，90 秒窗口；
+            // 同包名重复出现不会判重，所以「同一商户连续两笔相同金额」仍然保留。
+            if (app.deduper.crossChannelDuplicate(pkg, record.type, record.amount, record.displayName)) {
+                RecognitionLog.add("${PaymentParser.platformName(pkg)} 同一笔支付的其他通道通知已记过($via)，跳过")
+                AppLog.i("识别", "跨通道去重跳过：$pkg ${Money.plain(record.amount)} via=$via")
+                return@post
+            }
 
             // 与近期记录雷同只是**提示信息**，绝不作为拦截条件
             val similar = app.deduper.duplicate(record.type, record.amount, record.displayName)

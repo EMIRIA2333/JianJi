@@ -151,7 +151,8 @@ object PaymentParser {
         "支付成功", "付款成功", "成功支付", "成功付款", "已成功向", "已向.{0,20}(支付|付款|转账)",
         "支出", "扣款成功", "消费成功", "消费", "已支付", "转账成功", "付款金额", "购买成功",
         // 免密 / 自动扣款 / 代扣 / 订阅续费（图三那类通知）
-        "免密支付", "免密.{0,6}扣款", "自动扣款", "自动续费", "代扣", "已扣款", "扣款", "续费",
+        "免密支付", "免密.{0,6}扣款", "自动扣款", "自动扣费", "自动续费", "代扣", "已扣款", "已扣费",
+        "扣款", "扣费", "扣款成功", "扣费成功", "快捷支付扣款", "续费",
         "连续包月", "会员续费", "有一笔.{0,20}(支付|扣款|消费)",
         // 微信发红包 / 转出（注意不要用裸「转账给」，否则会把「张三转账给你」判成支出）
         "你已(?:成功)?(?:发送|发出|发了|包了)", "你发送了一个红包", "(?:发送|发出|已发|包)了?(?:一个)?红包",
@@ -164,7 +165,8 @@ object PaymentParser {
     private val STRONG_PATTERNS = listOf(
         "支付成功", "付款成功", "成功支付", "成功付款", "收款成功", "到账", "已成功向", "退款成功",
         "转账成功", "交易成功", "已向.{0,20}(支付|付款|转账)",
-        "免密支付", "自动扣款", "免密.{0,6}扣款", "扣款成功", "有一笔.{0,20}(支付|扣款|消费)",
+        "免密支付", "自动扣款", "自动扣费", "免密.{0,6}扣款", "扣款成功", "扣费成功",
+        "已扣款", "已扣费", "快捷支付扣款", "有一笔.{0,20}(支付|扣款|消费)",
         // 红包 / 转账（对方已领取＝你已支出；你已领取＝收入）
         "微信红包", "红包已被领取", "红包已被领完", "发送了一个红包", "领取了.{0,12}红包",
         "收到.{0,10}红包", "已成功转账"
@@ -181,6 +183,22 @@ object PaymentParser {
         // 转账/红包确实未完成或已退回：钱没出去，不能记
         // （不含「待对方确认收款」—— 转账发出即扣款，收款方未确认不影响付款人）
         "等待对方确认", "已过期未领取", "超过24小时未领取", "已退还转账"
+    ).map { Pattern.compile(it) }
+
+    /**
+     * **未来时 / 提醒类：钱还没出去，绝对不能记。**
+     *
+     * 真实案例（拼多多「先用后付」）：
+     * - 提前一天的提醒：标题「先用后付**扣款**提醒」+ 正文「您的订单**明天将自动**确认收货，
+     *   并自动付款6.93元」→ 因为标题里有「扣款」，以前会被记成支出 ✗
+     * - 当天真正扣款：正文「收货后**已**自动扣款133.9元」→ 这句不该被误伤 ✓
+     *   所以这里只拦"将来时"，不拦"已扣款 / 已扣费"。
+     */
+    private val FUTURE_DENY = listOf(
+        "将自动", "明天将", "明日将", "次日将", "即将", "预计.{0,8}(扣款|扣费|付款|支付)",
+        "待扣款", "待扣费", "扣款提醒", "扣费提醒", "付款提醒", "支付提醒",
+        "自动确认收货", "确认收货后.{0,6}将", "将在.{0,10}(扣款|扣费|付款|支付)",
+        "尚未扣款", "未扣款", "尚未付款"
     ).map { Pattern.compile(it) }
 
     /**
@@ -245,26 +263,50 @@ object PaymentParser {
     /**
      * @param strict true 用于屏幕页面内容解析（必须出现强关键词才可信）
      */
+    /**
+     * 上一次被拒的原因（仅用于日志诊断；解析只在单条后台线程调用）。
+     * 有了它，「为什么没记账」就不用猜了 —— 识别记录里会直接写出来。
+     */
+    @Volatile
+    var lastRejectReason: String = ""
+        private set
+
+    private fun reject(reason: String): Parsed? {
+        lastRejectReason = reason
+        return null
+    }
+
     fun parse(pkg: String, title: String, text: String, strict: Boolean = false): Parsed? {
+        lastRejectReason = ""
         val full = (title.trim() + "\n" + text.trim()).replace('\u00A0', ' ')
-        if (full.length < 3 || full.length > 3000) return null
-        if (HARD_DENY.any { it.matcher(full).find() }) return null
+        if (full.length < 3 || full.length > 3000) return reject("文本长度异常")
+        HARD_DENY.firstOrNull { it.matcher(full).find() }?.let {
+            return reject("命中硬忽略词「${it.pattern()}」")
+        }
+        // 未来时/提醒类（"明天将自动扣款"）：钱还没出去，直接不认
+        FUTURE_DENY.firstOrNull { it.matcher(full).find() }?.let {
+            return reject("是\"还没扣款\"的提醒/预告（${it.pattern()}）")
+        }
         // 退款关键词出现时，豁免「零钱通/余额宝/提现/充值」这类资金内部转移的拦截
         val refundish = REFUND_WORDS.any { full.contains(it) }
-        if (!refundish && HARD_DENY_UNLESS_REFUND.any { it.matcher(full).find() }) return null
+        if (!refundish && HARD_DENY_UNLESS_REFUND.any { it.matcher(full).find() }) {
+            return reject("是资金内部转移（零钱通/余额宝/提现/充值）")
+        }
 
         val income = INCOME_PATTERNS.any { it.matcher(full).find() }
         val expense = EXPENSE_PATTERNS.any { it.matcher(full).find() }
         val strong = STRONG_PATTERNS.any { it.matcher(full).find() }
 
         // 软忽略只在不构成强支付证据时生效
-        if (!strong && SOFT_DENY.any { it.matcher(full).find() }) return null
+        if (!strong && SOFT_DENY.any { it.matcher(full).find() }) return reject("疑似营销/引导文案")
         // 双命中或双未命中都不处理，避免误判方向
-        if (income == expense) return null
+        if (income == expense) {
+            return reject(if (income) "收支关键词同时命中" else "没有收支关键词，判断不了方向")
+        }
         val isIncome = income
 
-        val amount = extractAmount(full, allowBareLine = strict || strong) ?: return null
-        if (strict && !strong) return null
+        val amount = extractAmount(full, allowBareLine = strict || strong) ?: return reject("没提取到金额")
+        if (strict && !strong) return reject("页面解析缺少强证据")
 
         val merchant = extractMerchant(full) ?: platformName(pkg)
         return Parsed(
