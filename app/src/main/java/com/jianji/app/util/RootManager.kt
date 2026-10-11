@@ -193,7 +193,50 @@ object RootManager {
         ).output
         sb.append(hit.trim().ifBlank { "（无）" })
 
-        sb.append("\n\n【config 目录里提到简记的文件】\n")
+        sb.append("\n\n【★ 决定性三项：在哪里断掉】\n")
+        // ① 系统框架有没有被注入：注入后模块会打 "hookSystemServer: 开始安装"
+        val sysInjected = RootShell.run(
+            "grep -a -h 'hookSystemServer' /data/adb/lspd/log/*.log 2>/dev/null | wc -l",
+            timeoutMs = 8000
+        ).output.trim()
+        val sysLines = RootShell.run(
+            "grep -a -h 'hookSystemServer' /data/adb/lspd/log/*.log 2>/dev/null | tail -n 3",
+            timeoutMs = 8000
+        ).output.trim()
+        sb.append("① 系统框架是否注入：")
+        sb.append(
+            when {
+                sysLines.isNotBlank() -> "已注入 ✅（${sysLines.lines().size} 条痕迹）\n${sysLines.prependIndent("    ")}\n"
+                else -> "**未见注入痕迹** ❌ → LSPosed 作用域里的「系统框架」没勾上或未生效\n"
+            }
+        )
+
+        // ② 模块有没有拦到通知（拦到 ≠ 送达）
+        val caught = RootShell.run(
+            "grep -a -h '拦截到通知' /data/adb/lspd/log/*.log 2>/dev/null | wc -l",
+            timeoutMs = 8000
+        ).output.trim()
+        val sent = RootShell.run(
+            "grep -a -h '已转发给简记' /data/adb/lspd/log/*.log 2>/dev/null | wc -l",
+            timeoutMs = 8000
+        ).output.trim()
+        sb.append("② 模块拦截到通知：${caught.ifBlank { "0" }} 条 / 已转发给简记：${sent.ifBlank { "0" }} 条\n")
+        sb.append(
+            when {
+                caught.ifBlank { "0" }.trim() == "0" ->
+                    "    → 模块**根本没拦到通知**：目标应用进程没被注入（作用域/未重启）\n"
+                sent.ifBlank { "0" }.trim() == "0" ->
+                    "    → 拦到了但**没转发成功**：广播被拦或主程序没起来\n"
+                else -> "    → 拦截与转发都正常，查接收侧\n"
+            }
+        )
+        val recent = RootShell.run(
+            "grep -a -h -E '拦截到通知|已转发给简记' /data/adb/lspd/log/*.log 2>/dev/null | tail -n 5",
+            timeoutMs = 8000
+        ).output.trim()
+        if (recent.isNotBlank()) sb.append("③ 最近 5 条：\n").append(recent.prependIndent("    ")).append("\n")
+
+        sb.append("\n【config 目录里提到简记的文件】\n")
         val cfg = RootShell.run(
             "grep -a -l com.jianji.app /data/adb/lspd/config/* 2>/dev/null",
             timeoutMs = 8000
