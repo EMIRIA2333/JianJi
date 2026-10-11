@@ -328,6 +328,72 @@ object RootManager {
                     "      优先检查：LSPosed 里开关是否真的保存了、是否重启过、作用域是否包含 system"
             }
         )
+
+        // 导出按钮走的也是这个函数，所以「决定性三项」必须在这里——否则用户导出后还是看不出断在哪
+        sb.append("\n").append(hookChainEvidence())
+
+        sb.append("\n【当前应用的通道自检】\n")
+        val hookAt = Prefs.lastHookNotifyAt(ctx)
+        val anyAt = Prefs.lastNotifyAt(ctx)
+        sb.append("· 最近一次收到通知：")
+        sb.append(if (anyAt > 0) TimeUtil.formatFull(anyAt) + "（渠道：${Prefs.lastNotifyVia(ctx)}）" else "从未")
+        sb.append("\n· 最近一次**经由 Hook** 的通知：")
+        sb.append(if (hookAt > 0) TimeUtil.formatFull(hookAt) else "从未 ❌（Hook 通道从没送过东西进来）")
+        sb.append("\n· root 扫描开关：")
+        sb.append(if (Prefs.isRootAutoScan(ctx)) "已开（每 ${Prefs.rootScanIntervalSec(ctx)}s）" else "**未开** ❌（这是目前唯一被证明可用的通道）")
+        sb.append("\n· 通知使用权：")
+        sb.append(if (ServiceHealth.isNotificationListenerEnabled(ctx)) "已授权 ✅" else "未授权（授权后无需重启即可生效）")
+        sb.append("\n")
+        return sb.toString()
+    }
+
+    /**
+     * 「决定性三项」：把"通知链路断在哪一段"直接写成结论。
+     *
+     * 通知链路有四段：① 系统框架/目标应用有没有被注入 → ② 模块有没有拦到通知 →
+     * ③ 有没有转发（发广播）→ ④ 主程序有没有收到。
+     * 只看"没记上"是分不清这四段的，所以这里逐段给证据。
+     */
+    private fun hookChainEvidence(): String {
+        val sb = StringBuilder()
+        sb.append("【★ 决定性三项：链路断在哪一段】\n")
+
+        // ① 系统框架是否注入：注入后模块会打 "hookSystemServer: 开始安装"
+        val sysLines = RootShell.run(
+            "grep -a -h 'hookSystemServer' /data/adb/lspd/log/*.log 2>/dev/null | tail -n 3",
+            timeoutMs = 8000
+        ).output.trim()
+        sb.append("① 系统框架是否注入：")
+        if (sysLines.isNotBlank()) {
+            sb.append("已注入 ✅\n").append(sysLines.prependIndent("    ")).append("\n")
+        } else {
+            sb.append("**未见注入痕迹** ❌ → 作用域里的「系统框架」没勾上/未生效（只能靠重启注入）\n")
+        }
+
+        // ②③ 拦到了多少、转发出去多少
+        val caught = RootShell.run(
+            "grep -a -h '拦截到通知' /data/adb/lspd/log/*.log 2>/dev/null | wc -l",
+            timeoutMs = 8000
+        ).output.trim().ifBlank { "0" }
+        val sent = RootShell.run(
+            "grep -a -h '已转发给简记' /data/adb/lspd/log/*.log 2>/dev/null | wc -l",
+            timeoutMs = 8000
+        ).output.trim().ifBlank { "0" }
+        sb.append("② 模块拦截到通知：${caught.trim()} 条 ｜ ③ 已转发给简记：${sent.trim()} 条\n")
+        sb.append(
+            when {
+                caught.trim() == "0" ->
+                    "    → 模块**根本没拦到通知**：目标应用进程没被注入（作用域没勾该应用 / 该应用没重启过）\n"
+                sent.trim() == "0" ->
+                    "    → 拦到了但**没转发成功**：广播被系统拦截，或主程序当时没运行\n"
+                else -> "    → 拦截与转发都有记录，问题在④接收侧（查运行日志里的 [Hook] 行）\n"
+            }
+        )
+        val recent = RootShell.run(
+            "grep -a -h -E '拦截到通知|已转发给简记' /data/adb/lspd/log/*.log 2>/dev/null | tail -n 5",
+            timeoutMs = 8000
+        ).output.trim()
+        if (recent.isNotBlank()) sb.append("最近 5 条：\n").append(recent.prependIndent("    ")).append("\n")
         return sb.toString()
     }
 

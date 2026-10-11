@@ -234,7 +234,8 @@ class AutoCaptureSettingsActivity : BaseActivity() {
                 "关着最省电；开着才定时读，且需要无障碍为开",
                 switch = true, initial = Prefs.isRootAutoScan(ctx)
             ) { on ->
-                Prefs.setRootAutoScan(ctx, on)
+                Prefs.setRootAutoScanSetByUser(ctx, true)
+            Prefs.setRootAutoScan(ctx, on)
                 BackgroundWork.syncRootScan(ctx)
                 toast(if (on) "已开启：会常驻一条低优先级通知" else "已关闭（最省电）")
             }
