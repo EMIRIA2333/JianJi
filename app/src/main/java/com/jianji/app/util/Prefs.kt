@@ -39,6 +39,8 @@ object Prefs {
     private const val KEY_HOOK_RELOAD_WARNED = "hook_reload_warned_at"
     private const val KEY_LAST_NOTIFY_AT = "last_notify_at"
     private const val KEY_LAST_NOTIFY_VIA = "last_notify_via"
+    private const val KEY_LAST_HOOK_NOTIFY_AT = "last_hook_notify_at"
+    private const val KEY_HOOK_SILENT_WARNED = "hook_silent_warned_at"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_GLASS_MODE = "glass_mode"
     private const val KEY_LAST_TAB = "last_tab"
@@ -136,6 +138,15 @@ object Prefs {
     fun isCategoryLearning(c: Context): Boolean = sp(c).getBoolean(KEY_CATEGORY_LEARNING, true)
     fun setCategoryLearning(c: Context, v: Boolean) =
         sp(c).edit().putBoolean(KEY_CATEGORY_LEARNING, v).apply()
+
+    /** 最近一次**经由 Hook 通道**记到的通知时间（判断"Hook 加载了却收不到通知"） */
+    fun lastHookNotifyAt(c: Context): Long = sp(c).getLong(KEY_LAST_HOOK_NOTIFY_AT, 0L)
+    fun setLastHookNotifyAt(c: Context, at: Long) =
+        sp(c).edit().putLong(KEY_LAST_HOOK_NOTIFY_AT, at).apply()
+
+    fun hookSilentWarnedAt(c: Context): Long = sp(c).getLong(KEY_HOOK_SILENT_WARNED, 0L)
+    fun setHookSilentWarnedAt(c: Context, at: Long) =
+        sp(c).edit().putLong(KEY_HOOK_SILENT_WARNED, at).apply()
 
     /** 最近一次"有通知进入记账管道"的时间与渠道（诊断"通知到底有没有送到"的关键指标） */
     fun lastNotifyAt(c: Context): Long = sp(c).getLong(KEY_LAST_NOTIFY_AT, 0L)

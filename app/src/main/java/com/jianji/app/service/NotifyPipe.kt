@@ -42,7 +42,10 @@ object NotifyPipe {
             // 以前只能看到"未识别"，看不出是没送到还是没认出来（支付宝免密那个 bug 就卡在这）。
             AppLog.i("通知", "[$via] $pkg | $title | ${text.replace('\n', ' ').take(60)}")
             // 留痕：诊断页/日志里能一眼看到"最后一条通知是什么时候、走哪条通道进来的"
-            runCatching { Prefs.setLastNotify(ctx, via, System.currentTimeMillis()) }
+            runCatching {
+                Prefs.setLastNotify(ctx, via, System.currentTimeMillis())
+                if (via == "Hook") Prefs.setLastHookNotifyAt(ctx, System.currentTimeMillis())
+            }
             val parsed = PaymentParser.parse(pkg, title, text, strict = false)
             if (parsed == null) {
                 if (ScanPolicy.looksInteresting(text) && text.length > 4) {

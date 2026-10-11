@@ -72,7 +72,12 @@ class LogActivity : BaseActivity() {
         }
 
         binding.btnHookShare.setOnClickListener {
-            val intent = AppLog.shareTextIntentOf(this, "简记 Hook 诊断", hookDiagText())
+            // 与运行日志一样用**文件**分享（先写进 下载/简记，再分享系统媒体 URI）
+            val intent = AppLog.shareFileIntentOf(this, hookDiagText(), "jianji-hook", "简记 Hook 诊断")
+            if (intent == null) {
+                toast("生成分享失败，请用「保存 Hook 诊断」")
+                return@setOnClickListener
+            }
             runCatching { startActivity(intent) }
                 .onFailure { toast("无法调起分享，请用「保存 Hook 诊断」") }
         }

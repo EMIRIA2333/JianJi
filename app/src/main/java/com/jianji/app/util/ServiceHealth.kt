@@ -180,6 +180,7 @@ object ServiceHealth {
         }.getOrDefault(0L)
         if (updateAt > 0) Prefs.setLastUpdateAt(ctx, updateAt)
 
+        runCatching { warnIfHookSilent(ctx) }
         if (!hookReloadNeeded(ctx)) return
         val now = System.currentTimeMillis()
         if (now - Prefs.hookReloadWarnedAt(ctx) < DAY_MS) return
@@ -187,6 +188,33 @@ object ServiceHealth {
         AppLog.i("Hook", "检测到模块已更新但 Hook 上报时间更早 → 提示重启手机")
         Notifier.notifyHookReloadNeeded(ctx)
     }
+
+    /**
+     * Hook "加载了却收不到通知"检测。
+     *
+     * 判据：心跳新鲜（15 分钟内，说明模块在跑）+ 最近 6 小时**没有任何经由 Hook 记到的通知**
+     *      + 但确实有通知从别的通道进来（说明是这条通道的问题，不是"最近没支付"）。
+     * 命中后提示：去 LSPosed 勾作用域（系统框架 + 微信/支付宝）、重启手机、打开 root 扫描兜底。
+     *
+     * 真实案例：心跳正常、LSPosed 日志里也有 `应用进程 hook 已接入`，
+     * 但整段日志 `[Hook]` 通道 0 条，支付宝/微信通知全部漏记 —— 光看"已生效"根本发现不了。
+     */
+    fun warnIfHookSilent(ctx: Context) {
+        if (!Prefs.isAutoEnabled(ctx)) return
+        val now = System.currentTimeMillis()
+        if (!HookProtocol.isActive(Prefs.hookActiveAt(ctx), now)) return
+        val hookAt = Prefs.lastHookNotifyAt(ctx)
+        val anyAt = Prefs.lastNotifyAt(ctx)
+        val silent = (hookAt == 0L || now - hookAt > HOOK_SILENT_MS) && anyAt > 0
+        if (!silent) return
+        if (now - Prefs.hookSilentWarnedAt(ctx) < DAY_MS) return
+        Prefs.setHookSilentWarnedAt(ctx, now)
+        AppLog.i("Hook", "Hook 心跳正常但 6 小时内未转发任何通知 → 提示检查作用域/重启")
+        Notifier.notifyHookSilent(ctx)
+    }
+
+    /** Hook 静默判定窗口：6 小时 */
+    private const val HOOK_SILENT_MS = 6L * 60 * 60 * 1000
 
     /**
      * Hook 是否还在跑**更新前**的代码。
