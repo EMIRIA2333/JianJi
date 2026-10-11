@@ -103,7 +103,10 @@ object AppLog {
         append("账单页补齐=${Prefs.isBillScanEnabled(ctx)} 短信=${Prefs.isSmsEnabled(ctx)} ")
         append("root扫描=${Prefs.isRootAutoScan(ctx)} 扫描间隔=${Prefs.rootScanIntervalSec(ctx)}s ")
         append("Hook常驻=${Prefs.isHookGuard(ctx)} 分类学习=${Prefs.isCategoryLearning(ctx)} ")
-        append("主题=${themeLabel(Prefs.themeMode(ctx))} 毛玻璃=${Prefs.glassMode(ctx)}")
+        append("主题=${themeLabel(Prefs.themeMode(ctx))} 毛玻璃=${Prefs.glassMode(ctx)} ")
+        val lastAt = Prefs.lastNotifyAt(ctx)
+        append("最近通知=${if (lastAt > 0) "${(System.currentTimeMillis() - lastAt) / 1000}s前(${Prefs.lastNotifyVia(ctx)})" else "从未"} ")
+        append("Hook需重启=${runCatching { ServiceHealth.hookReloadNeeded(ctx) }.getOrDefault(false)}")
     }
 
     /**

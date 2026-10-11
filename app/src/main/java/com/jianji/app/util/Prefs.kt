@@ -35,6 +35,10 @@ object Prefs {
     private const val KEY_CATEGORY_LEARNING = "category_learning"
     private const val KEY_DISCLAIMER = "disclaimer_accepted"
     private const val KEY_LOG_KEEP_TODAY = "log_keep_today_only"
+    private const val KEY_LAST_UPDATE_AT = "last_update_at"
+    private const val KEY_HOOK_RELOAD_WARNED = "hook_reload_warned_at"
+    private const val KEY_LAST_NOTIFY_AT = "last_notify_at"
+    private const val KEY_LAST_NOTIFY_VIA = "last_notify_via"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_GLASS_MODE = "glass_mode"
     private const val KEY_LAST_TAB = "last_tab"
@@ -132,6 +136,21 @@ object Prefs {
     fun isCategoryLearning(c: Context): Boolean = sp(c).getBoolean(KEY_CATEGORY_LEARNING, true)
     fun setCategoryLearning(c: Context, v: Boolean) =
         sp(c).edit().putBoolean(KEY_CATEGORY_LEARNING, v).apply()
+
+    /** 最近一次"有通知进入记账管道"的时间与渠道（诊断"通知到底有没有送到"的关键指标） */
+    fun lastNotifyAt(c: Context): Long = sp(c).getLong(KEY_LAST_NOTIFY_AT, 0L)
+    fun lastNotifyVia(c: Context): String = sp(c).getString(KEY_LAST_NOTIFY_VIA, "").orEmpty()
+    fun setLastNotify(c: Context, via: String, at: Long) {
+        sp(c).edit().putLong(KEY_LAST_NOTIFY_AT, at).putString(KEY_LAST_NOTIFY_VIA, via).apply()
+    }
+
+    /** 本应用 APK 的更新时间（PackageManager.lastUpdateTime）：用来判断 Hook 是否运行着旧代码 */
+    fun lastUpdateAt(c: Context): Long = sp(c).getLong(KEY_LAST_UPDATE_AT, 0L)
+    fun setLastUpdateAt(c: Context, at: Long) = sp(c).edit().putLong(KEY_LAST_UPDATE_AT, at).apply()
+
+    fun hookReloadWarnedAt(c: Context): Long = sp(c).getLong(KEY_HOOK_RELOAD_WARNED, 0L)
+    fun setHookReloadWarnedAt(c: Context, at: Long) =
+        sp(c).edit().putLong(KEY_HOOK_RELOAD_WARNED, at).apply()
 
     /** 日志只保留当天（默认开）：开启后启动时清掉非今天的日志，避免日志无限增长 */
     fun isLogKeepTodayOnly(c: Context): Boolean = sp(c).getBoolean(KEY_LOG_KEEP_TODAY, true)
