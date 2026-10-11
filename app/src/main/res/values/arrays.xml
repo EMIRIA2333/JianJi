@@ -5,7 +5,16 @@
       必须与 HookPackages.ALL 保持一致 —— 由 PlatformCoverageTest 在测试里直接读本文件校验。
     -->
     <string-array name="xposed_scope">
+        <!--
+          系统框架（system_server）在 LSPosed 里有两种写法，这里**两个都写**：
+          · system  —— LSPosed 内部的伪包名（勾选后界面显示「系统框架」）
+          · android —— 它在 PackageManager 里的真实包名（显示为「Android 系统」）
+          LSPosed 的「推荐应用」只会列出**能解析到已安装包**的条目，
+          system 解析不到任何已安装包 → 于是推荐应用里看不到系统框架（真实踩过），
+          所以必须同时写 android，用户才能在推荐应用里一键勾上它。
+        -->
         <item>system</item>
+        <item>android</item>
         <item>com.tencent.mm</item>
         <item>com.eg.android.AlipayGphone</item>
         <item>com.unionpay</item>
