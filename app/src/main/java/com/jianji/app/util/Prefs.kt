@@ -40,6 +40,7 @@ object Prefs {
     private const val KEY_LAST_NOTIFY_AT = "last_notify_at"
     private const val KEY_LAST_NOTIFY_VIA = "last_notify_via"
     private const val KEY_LAST_HOOK_NOTIFY_AT = "last_hook_notify_at"
+    private const val KEY_ROOT_SCAN_USER_SET = "root_scan_user_set"
     private const val KEY_HOOK_SILENT_WARNED = "hook_silent_warned_at"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_GLASS_MODE = "glass_mode"
@@ -121,6 +122,11 @@ object Prefs {
      * 只有在「无障碍完全用不了」时才建议打开，并把间隔调到 120 秒以上。
      */
     fun isRootAutoScan(c: Context): Boolean = sp(c).getBoolean(KEY_ROOT_AUTO_SCAN, false)
+    /** 用户是否手动改过 root 扫描开关（改过就完全尊重用户，不再给默认建议） */
+    fun isRootAutoScanSetByUser(c: Context): Boolean = sp(c).getBoolean(KEY_ROOT_SCAN_USER_SET, false)
+    fun setRootAutoScanSetByUser(c: Context, v: Boolean) =
+        sp(c).edit().putBoolean(KEY_ROOT_SCAN_USER_SET, v).apply()
+
     fun setRootAutoScan(c: Context, v: Boolean) {
         AppLog.i("设置", "ROOT_AUTO_SCAN = $v")
         sp(c).edit().putBoolean(KEY_ROOT_AUTO_SCAN, v).apply()

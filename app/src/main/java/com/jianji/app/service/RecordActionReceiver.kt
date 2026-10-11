@@ -5,7 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import com.jianji.app.App
+import com.jianji.app.util.AppLog
+import com.jianji.app.util.BackgroundWork
 import com.jianji.app.util.Notifier
+import com.jianji.app.util.Prefs
+import com.jianji.app.util.RootManager
 import com.jianji.app.util.PendingRecord
 import com.jianji.app.util.RecordWriter
 
@@ -20,6 +24,21 @@ class RecordActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val app = context.applicationContext as App
+
+        // 「Hook 收不到通知」提醒里的一键兜底：打开 root 扫描（无需打开应用）
+        if (intent.action == ACTION_ENABLE_ROOT_SCAN) {
+            Prefs.setRootAutoScan(context, true)
+            Prefs.setRootAutoScanSetByUser(context, true)
+            Prefs.setRootScanIntervalSec(context, 60)
+            AppLog.i("设置", "通知按钮：打开 root 扫描（60s）")
+            BackgroundWork.sync(context)
+            runCatching { RootManager.scanNotifications(context) }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                Toast.makeText(context, "已打开 root 扫描（每 60 秒兜底一次）", Toast.LENGTH_LONG).show()
+            }
+            Notifier.cancelHookSilent(context)
+            return
+        }
 
         if (intent.action == ACTION_UNDO_IMPORT) {
             val ids = intent.getLongArrayExtra(EXTRA_UNDO_IDS)?.toList().orEmpty()
@@ -61,6 +80,7 @@ class RecordActionReceiver : BroadcastReceiver() {
         const val ACTION_FORCE_SAVE = "com.jianji.app.action.FORCE_SAVE_RECORD"
         const val ACTION_IGNORE = "com.jianji.app.action.IGNORE_RECORD"
         const val ACTION_UNDO_IMPORT = "com.jianji.app.action.UNDO_BILL_IMPORT"
+        const val ACTION_ENABLE_ROOT_SCAN = "com.jianji.app.action.ENABLE_ROOT_SCAN"
         const val EXTRA_UNDO_IDS = "undo_ids"
         const val EXTRA_NOTIFY_ID = "notify_id"
     }

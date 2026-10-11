@@ -297,6 +297,16 @@ object Notifier {
                         )
                 )
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .addAction(
+                    R.drawable.ic_stat_record,
+                    "打开 root 扫描",
+                    PendingIntent.getBroadcast(
+                        c, 21,
+                        Intent(c, com.jianji.app.service.RecordActionReceiver::class.java)
+                            .setAction("com.jianji.app.action.ENABLE_ROOT_SCAN"),
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
                 .setAutoCancel(true)
                 .build()
             post(c, SERVICE_OFF_ID + 2, n)
@@ -505,6 +515,9 @@ object Notifier {
 
     /** 取消「账单页补充」通知（撤销时调用） */
     fun cancelBillImport(c: Context) = cancel(c, BILL_IMPORT_ID)
+
+    /** 取消「Hook 收不到通知」提醒（用户点了"打开 root 扫描"之后） */
+    fun cancelHookSilent(c: Context) = cancel(c, SERVICE_OFF_ID + 2)
 
     /** 兼容保留：确认页提醒（通知权限受限时的兜底路径） */
     fun notifyConfirm(
