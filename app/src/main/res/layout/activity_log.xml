@@ -80,6 +80,41 @@
             android:text="清空" />
     </LinearLayout>
 
+    <!-- Hook 诊断：与运行日志一样支持保存/分享（排查 Hook 不生效时最有用） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="10dp"
+        android:paddingTop="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnHookSave"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="保存 Hook 诊断" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnHookShare"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:layout_height="wrap_content"
+            android:text="分享 Hook 诊断" />
+    </LinearLayout>
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/swKeepToday"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:paddingHorizontal="14dp"
+        android:text="日志只保留当天"
+        android:textSize="14sp" />
+
     <TextView
         android:id="@+id/tvHint"
         android:layout_width="match_parent"

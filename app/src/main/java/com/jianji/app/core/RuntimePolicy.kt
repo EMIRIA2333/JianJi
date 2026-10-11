@@ -23,14 +23,17 @@ object RuntimePolicy {
         autoEnabled && a11yEnabled
 
     /**
-     * root 轮询通知栏。
-     * 按用户要求：**无障碍没开就不扫描**；并且必须用户显式开启该功能。
+     * root 轮询通知栏（`dumpsys notification --noredact` 兜底）。
+     *
+     * 原本要求「无障碍已开启」才轮询，但 root 通道与无障碍没有依赖关系：
+     * 只要用户显式开启开关、总开关也开着，就应该工作 ——
+     * 这样「只用 Hook + root、完全不开无障碍」也是可用组合。
      */
     fun rootScanEnabled(
         autoEnabled: Boolean,
         rootScanOn: Boolean,
         a11yEnabled: Boolean
-    ): Boolean = autoEnabled && rootScanOn && a11yEnabled
+    ): Boolean = autoEnabled && rootScanOn
 
     /**
      * Hook 直读守护（前台服务，让进程常驻）。

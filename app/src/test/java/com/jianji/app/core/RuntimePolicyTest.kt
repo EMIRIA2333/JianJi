@@ -24,10 +24,12 @@ class RuntimePolicyTest {
 
     @Test
     fun noAccessibilityMeansNoScanning() {
-        // 无障碍没开 → 页面扫描 / root 轮询 / 账单页补齐 全部不跑
+        // 无障碍没开 → 页面扫描 / 账单页补齐 不跑（它们本来就依赖无障碍）
         assertFalse(RuntimePolicy.a11yWorkEnabled(autoEnabled = true, a11yEnabled = false))
-        assertFalse(RuntimePolicy.rootScanEnabled(true, rootScanOn = true, a11yEnabled = false))
         assertFalse(RuntimePolicy.billScanEnabled(true, a11yEnabled = false, billScanOn = true))
+        // 但 root 轮询**不依赖**无障碍：它是独立通道，
+        // 这样「只用 Hook + root、完全不开无障碍」也是可用组合
+        assertTrue(RuntimePolicy.rootScanEnabled(true, rootScanOn = true, a11yEnabled = false))
     }
 
     @Test

@@ -14,6 +14,8 @@ import androidx.annotation.RequiresApi
 import com.jianji.app.App
 import com.jianji.app.core.BillListParser
 import com.jianji.app.core.Categories
+import com.jianji.app.core.HookProtocol
+import com.jianji.app.core.NotifyText
 import com.jianji.app.core.ChatPaymentParser
 import com.jianji.app.core.PaymentParser
 import com.jianji.app.core.ReceiptParser
@@ -87,6 +89,14 @@ class AutoCaptureService : AccessibilityService() {
     @Volatile
     private var lastStatusCount = -1
 
+    /** 当前前台应用名（显示在状态通知里；只有支付/购物类应用才做页面扫描） */
+    @Volatile
+    private var currentAppLabel: String = ""
+
+    /** 上次状态通知里的应用名 / Hook 状态，避免重复发通知 */
+    private var lastStatusApp: String = ""
+    private var lastStatusHook: Boolean = false
+
     /** 上次记录「页面未识别」的时间（限流，避免刷屏） */
     @Volatile
     private var lastMissLogAt = 0L
@@ -99,7 +109,19 @@ class AutoCaptureService : AccessibilityService() {
         // 门控：总开关关掉 → 一切扫描都不做（后台零开销）
         if (!Prefs.isAutoEnabled(this)) return
         val pkg = event.packageName?.toString() ?: return
-        if (isSelf(pkg)) return
+        if (isSelf(pkg)) {
+            currentAppLabel = ""
+            return
+        }
+        // 识别"当前打开的应用"：即使它不在接管名单里也记下来（用于状态显示与"只扫描支付/购物类"的判断）
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val label = PaymentParser.platformName(pkg)
+            val shown = if (label.isNotBlank() && label != pkg) label else pkg.substringAfterLast('.')
+            if (shown != currentAppLabel) {
+                currentAppLabel = shown
+                refreshStatusNotification()
+            }
+        }
         if (!isWatchedPkg(pkg)) return
 
         when (event.eventType) {
@@ -136,11 +158,13 @@ class AutoCaptureService : AccessibilityService() {
         try {
             val n = event.parcelableData as? Notification
             if (n != null) {
-                title = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-                text = listOfNotNull(
-                    n.extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
-                    n.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-                ).joinToString("\n")
+                // 统一走 NotifyText：它包含 RemoteViews 兜底，
+                // 支付宝「交易提醒」这类自定义布局的通知以前在这里会被丢掉
+                val pair = NotifyText.of(n)
+                if (pair != null) {
+                    title = pair.first
+                    text = pair.second
+                }
                 notifyAt = runCatching { n.`when` }.getOrDefault(0L)
             }
         } catch (_: Exception) {
@@ -422,16 +446,26 @@ class AutoCaptureService : AccessibilityService() {
         }
     }
 
-    /** 更新常驻状态通知的「今日已记 N 笔」（数字没变就不重复发通知） */
+    /**
+     * 更新常驻状态通知。
+     *
+     * 除了「今日已记 N 笔」，还会显示**当前前台应用**与 **Hook 直读是否生效**：
+     * 用户要求"能识别当前打开的应用，只有支付/购物软件才扫描" —— 显示出来才看得见它在按预期工作；
+     * Hook 生效时也要写明，免得以为"没开无障碍就没在工作"。
+     */
     private fun refreshStatusNotification() {
         if (!Prefs.isStatusNotification(this)) return
         val app = application as App
         val start = TimeUtil.dayStart(System.currentTimeMillis())
+        val appLabel = currentAppLabel
+        val hookOn = HookProtocol.isActive(Prefs.hookActiveAt(this), System.currentTimeMillis())
         app.post {
             val n = runCatching { app.dao.countInRange(start, start + DAY_MS) }.getOrDefault(0)
-            if (n != lastStatusCount) {
+            if (n != lastStatusCount || appLabel != lastStatusApp || hookOn != lastStatusHook) {
                 lastStatusCount = n
-                Notifier.updateStatusNotification(this, true, n)
+                lastStatusApp = appLabel
+                lastStatusHook = hookOn
+                Notifier.updateStatusNotification(this, true, n, appLabel, hookOn)
             }
         }
     }

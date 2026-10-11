@@ -167,7 +167,17 @@ object Notifier {
      * 运行状态常驻通知（对应「通知栏状态」开关）：
      * 让用户一眼看到自动记账是否还活着 —— 无障碍被系统关掉时这条通知会消失。
      */
-    fun updateStatusNotification(c: Context, enabled: Boolean, todayCount: Int) {
+    /**
+     * @param currentApp 当前前台应用名（无障碍可识别）；为空表示未知
+     * @param hookActive Hook 直读是否已生效 —— 生效时文案要说明"不需要无障碍"
+     */
+    fun updateStatusNotification(
+        c: Context,
+        enabled: Boolean,
+        todayCount: Int,
+        currentApp: String = "",
+        hookActive: Boolean = false
+    ) {
         main.post {
             ensureChannel(c)
             if (!enabled) {
@@ -175,7 +185,13 @@ object Notifier {
                 return@post
             }
             if (!canNotify(c)) return@post
-            val text = if (todayCount > 0) "运行中 · 今日已记 $todayCount 笔" else "运行中 · 等待识别支付"
+            val text = buildString {
+                append("运行中")
+                if (hookActive) append(" · Hook 直读已生效")
+                if (currentApp.isNotBlank()) append(" · 当前:").append(currentApp)
+                if (todayCount > 0) append(" · 今日已记 ").append(todayCount).append(" 笔")
+                else append(" · 等待识别支付")
+            }
             val n = NotificationCompat.Builder(c, CHANNEL_STATUS)
                 .setSmallIcon(R.drawable.ic_stat_record)
                 .setContentTitle("简记 · 自动记账")
