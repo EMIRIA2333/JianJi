@@ -423,13 +423,19 @@ class ProfileFragment : Fragment() {
                 }
                 Prefs.setGlassMode(requireContext(), if (on) 1 else 0)
                 AppLog.i("毛玻璃", "开关切换 → ${if (on) "开" else "关"}")
-                // 紧接着抑制一次开关变化：GlassHelper.apply 可能触发重建，重建期的点击穿透不许改设置
-                SettingsGuard.suppressSwitchChanges(1800)
+                // 只吞掉"下一个"回调（点击穿透最多一次）——用整段时间抑制会导致**没法快速连续开关**
+                SettingsGuard.suppressNextSwitchChange(600)
                 BannerBackgrounds.invalidate()
                 // 当场应用到当前界面（不 recreate → 不闪退、不滚回顶部）
                 GlassHelper.apply(requireActivity())
+                // 轻量刷新：只更新这一行的开关与副标题，不整页 refresh（那样会明显卡手，连点会感觉"吞掉"）
+                setSwitchState(row(binding.rowGlass).swRow, on)
+                row(binding.rowGlass).tvRowSubtitle.text = if (on) {
+                    "已开启 · 配色跟随主题（浅色=白玻璃 / 深色=黑玻璃）"
+                } else {
+                    "关闭：卡片为实心"
+                }
                 toast(if (on) "已开启毛玻璃（跟随主题配色）" else "已关闭")
-                refresh()
             }
         }
 
