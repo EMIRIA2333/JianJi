@@ -240,6 +240,36 @@ object Notifier {
         }
     }
 
+    /**
+     * 「模块已更新，但 Hook 仍在跑旧代码」提醒。
+     *
+     * LSPosed 只在**进程启动时**注入模块代码。更新 APK 之后，已经在跑的
+     * system_server / 支付宝 / 微信 进程里还是旧代码 —— 表现就是
+     * "心跳正常、但一条通知都收不到"（真实踩过：支付宝免密漏记就卡在这）。
+     */
+    fun notifyHookReloadNeeded(c: Context) {
+        main.post {
+            ensureChannel(c)
+            if (!canNotify(c)) return@post
+            val n = NotificationCompat.Builder(c, CHANNEL_CONFIRM)
+                .setSmallIcon(R.drawable.ic_stat_record)
+                .setContentTitle("简记 · 请重启手机使模块生效")
+                .setContentText("模块刚更新过，但 Hook 还在运行旧代码（收不到通知）")
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(
+                            "简记模块刚更新过，但系统框架 / 微信 / 支付宝里跑的还是更新前的旧代码 —— " +
+                                "这期间的通知可能漏记。\n\n请**重启手机**（或至少强制停止并重新打开微信、支付宝），" +
+                                "新代码才会被注入。重启后本条提示会自动消失。"
+                        )
+                )
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            post(c, SERVICE_OFF_ID + 1, n)
+        }
+    }
+
     /** 主线程安全：内部已切换到主线程 */
     fun notifyRecord(c: Context, r: Record, merchant: String) {
         main.post {

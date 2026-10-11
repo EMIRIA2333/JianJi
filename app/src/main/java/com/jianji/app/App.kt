@@ -71,6 +71,8 @@ class App : Application() {
                 priority = Thread.MIN_PRIORITY + 1
             }
         }
+        // 模块更新后 Hook 仍可能跑旧代码（LSPosed 只在进程启动时注入）→ 提示重启并留痕
+        runCatching { com.jianji.app.util.ServiceHealth.recordUpdateAndWarn(this) }
     }
 
     /** 主题：跟随系统 / 纯白 / 纯黑（在 Application 里统一生效，切换后所有页面一致） */

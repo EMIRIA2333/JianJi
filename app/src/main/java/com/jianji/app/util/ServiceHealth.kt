@@ -170,6 +170,37 @@ object ServiceHealth {
      * 无障碍服务被关闭时提醒用户（每天最多一次）。
      * 由界面进入前台时调用（服务本身无法感知自己被杀）。
      */
+    /**
+     * 记录本次 APK 的更新时间，并在"模块已更新但 Hook 仍在跑旧代码"时提醒一次。
+     * 在 App.onCreate 调用（进程随时会因 Hook 广播而启动，比等用户打开界面更及时）。
+     */
+    fun recordUpdateAndWarn(ctx: Context) {
+        val updateAt = runCatching {
+            ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L)
+        if (updateAt > 0) Prefs.setLastUpdateAt(ctx, updateAt)
+
+        if (!hookReloadNeeded(ctx)) return
+        val now = System.currentTimeMillis()
+        if (now - Prefs.hookReloadWarnedAt(ctx) < DAY_MS) return
+        Prefs.setHookReloadWarnedAt(ctx, now)
+        AppLog.i("Hook", "检测到模块已更新但 Hook 上报时间更早 → 提示重启手机")
+        Notifier.notifyHookReloadNeeded(ctx)
+    }
+
+    /**
+     * Hook 是否还在跑**更新前**的代码。
+     *
+     * 判据：Hook 最近上报时间 < 本 APK 更新时间。
+     * LSPosed 只在进程启动时注入，所以更新后未重启的系统框架/应用里仍是旧代码：
+     * 表现为"心跳正常但一条通知都收不到"。
+     */
+    fun hookReloadNeeded(ctx: Context): Boolean {
+        val up = Prefs.lastUpdateAt(ctx)
+        val at = Prefs.hookActiveAt(ctx)
+        return up > 0 && at > 0 && at < up
+    }
+
     fun warnIfDisabled(ctx: Context) {
         if (!Prefs.isAutoEnabled(ctx)) return
         if (isAccessibilityEnabled(ctx)) return

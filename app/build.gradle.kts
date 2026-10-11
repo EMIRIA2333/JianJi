@@ -10,8 +10,8 @@ android {
         applicationId = "com.jianji.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 65
-        versionName = "3.16.2"
+        versionCode = 66
+        versionName = "3.16.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
