@@ -18,7 +18,20 @@ object SmsParser {
         "验证码", "校验码", "动态码", "动态密码", "网银登录", "登录", "激活",
         "积分", "礼品", "抽奖", "活动", "优惠", "专属", "额度", "贷款", "分期",
         "最低还款", "还款日", "应还款", "剩余应还", "账单日", "逾期", "催",
-        "电子回单", "对账单", "止付", "冻结", "挂失", "银行卡失效", "解绑"
+        "电子回单", "对账单", "止付", "挂失", "银行卡失效", "解绑",
+        // 「冻结」不能单独当拦截词：境外/预授权消费短信会写
+        // 「金额1.38新加坡元，**已冻结**7.36人民币」——一拦就整条丢掉（真实 bug）。
+        // 只拦"账户/卡/资金被冻结"这种真正的异常状态。
+        "(?:账户|卡片|该卡|资金|存款)[^，。;；]{0,8}(?:被)?冻结"
+    ).map { Pattern.compile(it) }
+
+    /**
+     * 冲正 / 解冻 / 撤销：这是**反向撤销**，不是新的一笔。
+     * 例：「…发生双信息无卡消费**冲正**交易，金额1.38新加坡元，已解冻7.36人民币」
+     * 以前会被记成一笔支出（还取错了金额），现在直接忽略。
+     */
+    private val REVERSAL_PATTERNS = listOf(
+        "冲正", "解冻", "交易撤销", "撤销交易", "撤单", "已冲正"
     ).map { Pattern.compile(it) }
 
     /** 必须具备的银行语境：降低把普通短信当交易的风险 */
@@ -34,9 +47,28 @@ object SmsParser {
         "支出", "消费", "借记", "划扣", "代扣", "扣款", "支付", "付款", "转出", "快捷", "还款成功", "还款"
     ).map { Pattern.compile(it) }
 
-    private val AMOUNT_PATTERNS = listOf(
-        Pattern.compile("(?:人民币|RMB)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*元"),
-        Pattern.compile("([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*元"),
+
+    /**
+     * **人民币金额优先**：数字 + 人民币/RMB/CNY、人民币/RMB/CNY + 数字、数字 + 元。
+     *
+     * 为什么单列一组：境外消费短信会同时出现两个数字
+     * 「金额1.38新加坡元，已冻结7.36人民币」——记账要用 **7.36**（人民币），
+     * 旧实现先匹配「金额1.38」→ 记成 1.38（真实 bug）。
+     */
+    private val CNY_AMOUNT_PATTERNS = listOf(
+        Pattern.compile("([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:人民币|RMB|CNY)"),
+        Pattern.compile("(?:人民币|RMB|CNY)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*元?"),
+        Pattern.compile("([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*元")
+    )
+
+    /** 外币金额（人民币金额不存在时才用）：数字 + 币种，或币种缩写 + 数字 */
+    private val FX_AMOUNT_PATTERNS = listOf(
+        Pattern.compile(
+            "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*" +
+                "(?:新加坡元|新元|美元|日元|欧元|港币|港元|英镑|澳元|加元|韩元|泰铢|新台币|迪拉姆|卢布|法郎" +
+                "|SGD|USD|EUR|JPY|HKD|GBP|AUD|CAD|KRW|THB|SGD|USD)"
+        ),
+        Pattern.compile("(?:SGD|USD|EUR|JPY|HKD|GBP|AUD|CAD|KRW|THB)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"),
         Pattern.compile("金额[:：]?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
     )
 
@@ -64,6 +96,8 @@ object SmsParser {
     fun parse(sender: String, body: String): Parsed? {
         val text = body.replace('\u00A0', ' ').trim()
         if (text.length < 8 || text.length > 500) return null
+        // 冲正/撤销/解冻：这是反向操作，不是新交易（记了就会多一笔、还取错金额）
+        if (REVERSAL_PATTERNS.any { it.matcher(text).find() }) return null
         if (DENY_PATTERNS.any { it.matcher(text).find() }) return null
 
         // 方向判定
@@ -71,13 +105,23 @@ object SmsParser {
         val expense = EXPENSE_PATTERNS.any { it.matcher(text).find() }
         if (income == expense) return null
 
-        // 金额
+        // 金额：**人民币优先**，没有再退回外币/「金额X」。
+        // 例：「金额1.38新加坡元，已冻结7.36人民币」→ 必须取 7.36
         var amount: Double? = null
-        for (p in AMOUNT_PATTERNS) {
+        for (p in CNY_AMOUNT_PATTERNS) {
             val m = p.matcher(text)
             if (m.find()) {
-                val v = m.group(1).replace(",", "").toDoubleOrNull()
-                if (v != null && v > 0.0 && v <= PaymentParser.MAX_AMOUNT) { amount = Math.round(v * 100.0) / 100.0; break }
+                amount = m.group(1).toAmountOrNull()
+                if (amount != null) break
+            }
+        }
+        if (amount == null) {
+            for (p in FX_AMOUNT_PATTERNS) {
+                val m = p.matcher(text)
+                if (m.find()) {
+                    amount = m.group(1).toAmountOrNull()
+                    if (amount != null) break
+                }
             }
         }
         if (amount == null) return null
@@ -103,6 +147,12 @@ object SmsParser {
         return Parsed(type, amount, merchant, bank, 1.0)
     }
 
+    /** 金额字符串 → Double（去逗号、四舍五入到分、范围校验） */
+    private fun String.toAmountOrNull(): Double? {
+        val v = replace(",", "").toDoubleOrNull() ?: return null
+        if (v <= 0.0 || v > PaymentParser.MAX_AMOUNT) return null
+        return Math.round(v * 100.0) / 100.0
+    }
     fun extractMerchant(text: String): String? {
         for (p in MERCHANT_PATTERNS) {
             val m = p.matcher(text)

@@ -89,6 +89,10 @@ class AutoCaptureService : AccessibilityService() {
     @Volatile
     private var lastStatusCount = -1
 
+    /** 当前前台**包名**：任何事件都更新，用来跳过"后台残留窗口"的事件 */
+    @Volatile
+    private var foregroundPkg: String = ""
+
     /** 当前前台应用名（显示在状态通知里；只有支付/购物类应用才做页面扫描） */
     @Volatile
     private var currentAppLabel: String = ""
@@ -111,10 +115,13 @@ class AutoCaptureService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (isSelf(pkg)) {
             currentAppLabel = ""
+            foregroundPkg = ""
             return
         }
-        // 识别"当前打开的应用"：即使它不在接管名单里也记下来（用于状态显示与"只扫描支付/购物类"的判断）
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // 识别"当前打开的应用"：**任何事件都算前台信号**（窗口/内容变化都更新）。
+        // 以前只在窗口事件里更新，导致状态通知长期显示"上一个打开过的支付/购物应用"。
+        if (pkg != foregroundPkg) {
+            foregroundPkg = pkg
             val label = PaymentParser.platformName(pkg)
             val shown = if (label.isNotBlank() && label != pkg) label else pkg.substringAfterLast('.')
             if (shown != currentAppLabel) {
@@ -180,12 +187,18 @@ class AutoCaptureService : AccessibilityService() {
 
     // ---------------- 页面 ----------------
 
-    private fun handleWindow(event: AccessibilityEvent, pkg: String, windowScan: Boolean) {
+    private fun handleWindow(event: AccessibilityEvent, pkg: String, windowScan: Boolean, retry: Boolean = false) {
         val now = System.currentTimeMillis()
 
+        // ⓪ 只处理**当前前台应用**的事件。
+        //    MIUI 偶尔会把已经退到后台的窗口事件再投递一次，那会让扫描发生在旧界面上
+        //    （用户反馈："识别到的总是最后打开过的那个支付/购物应用"）。
+        if (pkg != foregroundPkg) return
+
         // ① 事件文本预筛（纯 CPU，最便宜）：内容变化事件占绝大多数（滚动/打字/动画都会触发），
-        //    若事件自带的变更文本与钱无关，直接跳过整棵树遍历 —— 这是最省电的一步
-        if (!windowScan && !ScanPolicy.looksInteresting(eventTextOf(event))) return
+        //    若事件自带的变更文本与钱无关，直接跳过整棵树遍历 —— 这是最省电的一步。
+        //    retry 例外：它就是用来补救"那次窗口事件时页面还没渲染完"的，不能再被旧文本筛掉。
+        if (!windowScan && !retry && !ScanPolicy.looksInteresting(eventTextOf(event))) return
 
         // ② 间隔与自适应退避（一次原子读 + 比较）；系统省电 / 低电量未充电时进一步降频
         val batterySaver = isBatterySaverOn() || isLowBattery()
@@ -193,10 +206,28 @@ class AutoCaptureService : AccessibilityService() {
         var interval = ScanPolicy.intervalFor(windowScan, powerSave, missStreak.get(), batterySaver)
         // 空文本的内容变化事件（WebView 动画/光标闪烁等）信号价值低，再翻倍间隔
         if (!windowScan && eventTextOf(event).isNullOrEmpty()) interval *= 2
-        val lastRef = if (windowScan) lastWindowScan else lastContentScan
-        val last = lastRef.get()
-        if (now - last < interval) return
-        if (!lastRef.compareAndSet(last, now)) return
+        if (!retry) {
+            val lastRef = if (windowScan) lastWindowScan else lastContentScan
+            val last = lastRef.get()
+            if (now - last < interval) return
+            if (!lastRef.compareAndSet(last, now)) return
+        } else {
+            lastContentScan.set(now)
+        }
+
+        // ②b 窗口事件之后补一次延迟重扫（不受间隔限制）。
+        //     根因：window-state 事件常常在页面内容渲染**之前**就到，那一次扫描扑空，
+        //     之后页面如果不再产生内容变化事件，就再也扫不到 —— 表现就是
+        //     "必须下拉一下通知栏才会扫描到"（用户反馈）。这里主动补一次 700ms 后的扫描。
+        if (windowScan) {
+            mainHandler.postDelayed({
+                runCatching {
+                    if (foregroundPkg == pkg && Prefs.isAutoEnabled(this)) {
+                        handleWindow(event, pkg, windowScan = false, retry = true)
+                    }
+                }
+            }, 700L)
+        }
 
         // ③ 息屏时不做页面扫描（isInteractive 是 IPC，做了 2 秒缓存）
         if (!isInteractive()) return
