@@ -9,12 +9,16 @@
     android:orientation="vertical"
     android:paddingHorizontal="4dp">
 
+    <!--
+      高度必须是确定的：之前写成 layout_height="0dp" + layout_weight="0"，
+      结果滚动区域高度为 0，条款正文完全看不见（只有提示语和按钮）。
+      这里固定 340dp：任何屏幕上都能看到正文，且一定能滚动到底部。
+    -->
     <ScrollView
         android:id="@+id/svBody"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="0"
-        android:maxHeight="420dp"
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
         android:scrollbars="vertical">
 
         <TextView
