@@ -71,6 +71,12 @@ class App : Application() {
                 priority = Thread.MIN_PRIORITY + 1
             }
         }
+        // 版本检查（仅访问 GitHub 的公开版本号，默认 12 小时一次；失败静默，绝不影响记账）
+        runCatching {
+            val ver = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+            com.jianji.app.util.UpdateAgent.maybeCheck(this, ver)
+        }
+
         // 模块更新后 Hook 仍可能跑旧代码（LSPosed 只在进程启动时注入）→ 提示重启并留痕
         runCatching { com.jianji.app.util.ServiceHealth.recordUpdateAndWarn(this) }
     }

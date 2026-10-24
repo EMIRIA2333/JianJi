@@ -52,6 +52,8 @@ object Notifier {
 
     /** 「无障碍已关闭」提醒的固定 id */
     private const val SERVICE_OFF_ID = 9903
+    /** 新版本提醒 */
+    private const val UPDATE_ID = 9906
 
     /** root 自动读通知的前台服务通知 id */
     const val ROOT_SCAN_ID = 9904
@@ -310,6 +312,42 @@ object Notifier {
                 .setAutoCancel(true)
                 .build()
             post(c, SERVICE_OFF_ID + 2, n)
+        }
+    }
+
+    /**
+     * 发现新版本：点开是 GitHub Release 页面（由用户自行下载安装，应用不自动更新）。
+     * 通知里只有版本号与链接，不含任何账本数据。
+     */
+    fun notifyUpdate(c: Context, version: String, releaseUrl: String) {
+        main.post {
+            ensureChannel(c)
+            if (!canNotify(c)) return@post
+            val intent = runCatching {
+                Intent(Intent.ACTION_VIEW, android.net.Uri.parse(releaseUrl))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }.getOrNull() ?: return@post
+            val n = NotificationCompat.Builder(c, CHANNEL_DONE)
+                .setSmallIcon(R.drawable.ic_stat_record)
+                .setContentTitle("简记 · 发现新版本 $version")
+                .setContentText("点这里打开 GitHub Release 页面自行下载安装")
+                .setStyle(
+                    NotificationCompat.BigTextStyle().bigText(
+                        "新版本 $version 已发布（当前版本可在「我的」页查看）。\n\n" +
+                            "更新方式：点开这条通知 → 在 GitHub Release 页面下载 APK → 自行安装。\n" +
+                            "应用不会自动下载或安装；升级前请先导出备份账本数据。"
+                    )
+                )
+                .setContentIntent(
+                    PendingIntent.getActivity(
+                        c, 33, intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true)
+                .build()
+            post(c, UPDATE_ID, n)
         }
     }
 

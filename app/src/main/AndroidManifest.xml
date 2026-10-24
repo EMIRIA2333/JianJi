@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- 自动记账成功后发出本地提醒（不联网、不采集任何数据） -->
+    <!-- 仅用于「检查更新」：GET GitHub Releases 的公开版本号；不发送任何用户数据 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 短信记账：实时接收银行支付短信（仅解析，不上传；可随时关闭） -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />

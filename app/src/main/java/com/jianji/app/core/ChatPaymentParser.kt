@@ -63,7 +63,12 @@ object ChatPaymentParser {
         "对方正在输入", "按住 说话", "按住说话", "语音输入", "表情", "发送", "取消", "确定",
         // 气泡状态词本身不能当联系人名
         "已被领取", "已被领完", "已领完", "已存入零钱", "你领取了", "红包到账", "已转入零钱",
-        "待对方确认收款", "待确认收款", "已退还", "退还成功", "等待对方领取", "已发送"
+        "待对方确认收款", "待确认收款", "已退还", "退还成功", "等待对方领取", "已发送",
+        // 聊天页的**界面按钮/入口**文字：曾经被当成联系人名，
+        // 结果一笔转账的 note 时而「浮窗」时而「返回」→ 去重键不稳定 → 同一笔被记 4 次（真实 bug）。
+        "浮窗", "悬浮窗", "小窗", "返回", "更多", "关闭", "最小化", "相册", "拍摄", "视频通话",
+        "语音", "文件", "位置", "收藏", "转账说明", "零钱明细", "账单", "朋友圈", "通讯录",
+        "发现", "我", "微信团队", "服务通知", "搜一搜", "扫一扫", "转账给", "转账到零钱"
     )
 
     /**
@@ -79,7 +84,7 @@ object ChatPaymentParser {
         val lines = text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.size < 3) return emptyList()
 
-        val title = extractChatTitle(lines) ?: PaymentParser.platformName(pkg)
+        val title = safeTitle(extractChatTitle(lines), pkg)
         val out = ArrayList<Entry>()
         val seen = HashSet<String>()
 
@@ -161,6 +166,21 @@ object ChatPaymentParser {
     }
 
     /** 会话标题（联系人 / 群名）：从上往下找第一条像名字的文本 */
+    /**
+     * 聊天标题兜底：抽出来的东西必须像"人/群名"。
+     *
+     * 真实 bug：抽到过「浮窗」「返回」这类界面按钮文字 —— 同一笔转账两次扫描得到不同 note，
+     * 而"按页面条数同步"的去重键里包含 note，于是各记一遍（1700 被记成 4 条）。
+     */
+    private fun safeTitle(raw: String?, pkg: String): String {
+        val fallback = PaymentParser.platformName(pkg)
+        val t = raw?.trim().orEmpty()
+        if (t.length < 2) return fallback
+        if (NOISE_TITLE.any { t == it || t.startsWith(it) }) return fallback
+        // 纯符号 / 纯数字 / 全是大写英文按钮（OK、SEND…）也不像人名
+        if (t.none { it.isLetterOrDigit() }) return fallback
+        return t
+    }
     fun extractChatTitle(lines: List<String>): String? {
         lines.take(15).forEach { raw ->
             val s = raw.trim()

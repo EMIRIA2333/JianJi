@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  使用前警告：必须**下拉看完**才允许点「同意」/「拒绝」。
+  同意 → 正常使用；拒绝 → 应用自动退出。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="4dp">
+
+    <ScrollView
+        android:id="@+id/svBody"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0"
+        android:maxHeight="420dp"
+        android:scrollbars="vertical">
+
+        <TextView
+            android:id="@+id/tvBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingExtra="3dp"
+            android:textColor="@color/text_primary"
+            android:textIsSelectable="true"
+            android:textSize="13sp" />
+    </ScrollView>
+
+    <TextView
+        android:id="@+id/tvScrollHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="↓ 请下拉阅读到底部，才能选择「同意」或「拒绝」"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp" />
+</LinearLayout>
