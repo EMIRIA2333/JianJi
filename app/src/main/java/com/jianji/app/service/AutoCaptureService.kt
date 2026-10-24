@@ -198,14 +198,19 @@ class AutoCaptureService : AccessibilityService() {
         // ① 事件文本预筛（纯 CPU，最便宜）：内容变化事件占绝大多数（滚动/打字/动画都会触发），
         //    若事件自带的变更文本与钱无关，直接跳过整棵树遍历 —— 这是最省电的一步。
         //    retry 例外：它就是用来补救"那次窗口事件时页面还没渲染完"的，不能再被旧文本筛掉。
-        if (!windowScan && !retry && !ScanPolicy.looksInteresting(eventTextOf(event))) return
+        val evText = eventTextOf(event)
+        val paymentApp = isPageScanPkg(pkg) || pkg == PaymentParser.PKG_WECHAT || pkg == PaymentParser.PKG_ALIPAY
+        // 支付/账单类应用里，"文本为空"的内容变化也必须扫：
+        // 很多页面（聊天、账单详情的 WebView）变化时不带文本，以前会被 looksInteresting("") 直接丢掉，
+        // 表现就是"必须下拉一下通知栏才会记录"（下拉会触发带文本的事件）。
+        if (!windowScan && !retry && !ScanPolicy.looksInteresting(evText) && !(paymentApp && evText.isNullOrEmpty())) return
 
         // ② 间隔与自适应退避（一次原子读 + 比较）；系统省电 / 低电量未充电时进一步降频
         val batterySaver = isBatterySaverOn() || isLowBattery()
         val powerSave = Prefs.isPowerSave(this) || batterySaver
         var interval = ScanPolicy.intervalFor(windowScan, powerSave, missStreak.get(), batterySaver)
         // 空文本的内容变化事件（WebView 动画/光标闪烁等）信号价值低，再翻倍间隔
-        if (!windowScan && eventTextOf(event).isNullOrEmpty()) interval *= 2
+        if (!windowScan && evText.isNullOrEmpty() && !paymentApp) interval *= 2
         if (!retry) {
             val lastRef = if (windowScan) lastWindowScan else lastContentScan
             val last = lastRef.get()
@@ -220,13 +225,15 @@ class AutoCaptureService : AccessibilityService() {
         //     之后页面如果不再产生内容变化事件，就再也扫不到 —— 表现就是
         //     "必须下拉一下通知栏才会扫描到"（用户反馈）。这里主动补一次 700ms 后的扫描。
         if (windowScan) {
-            mainHandler.postDelayed({
-                runCatching {
-                    if (foregroundPkg == pkg && Prefs.isAutoEnabled(this)) {
-                        handleWindow(event, pkg, windowScan = false, retry = true)
+            listOf(700L, 1600L).forEach { delay ->
+                mainHandler.postDelayed({
+                    runCatching {
+                        if (foregroundPkg == pkg && Prefs.isAutoEnabled(this)) {
+                            handleWindow(event, pkg, windowScan = false, retry = true)
+                        }
                     }
-                }
-            }, 700L)
+                }, delay)
+            }
         }
 
         // ③ 息屏时不做页面扫描（isInteractive 是 IPC，做了 2 秒缓存）
@@ -398,7 +405,9 @@ class AutoCaptureService : AccessibilityService() {
                     payMethod = it.payMethod,
                     category = it.category
                 )
-            }
+            },
+            // 聊天页：去重不看 note（昵称/群名会漂移），窗口也放长到 10 分钟
+            matchNote = false
         )
     }
 
@@ -426,21 +435,28 @@ class AutoCaptureService : AccessibilityService() {
         rawText: String,
         tag: String,
         label: String,
-        rows: List<SyncRow>
+        rows: List<SyncRow>,
+        /**
+         * 去重时是否带上 note。
+         * 聊天页要 false：note 是对方昵称/群名，界面稍微一变就会漂移，
+         * 而"按页面条数同步"的去重键包含 note → 同一笔被反复记（真实 bug：1700 被记成 4 条）。
+         */
+        matchNote: Boolean = true
     ) {
         if (rows.isEmpty()) return
         // 同一页面在短时间内被多次事件扫到：只处理一次。
         // 用**完整文本**做键（之前只取前 1200 字，聊天页尾部的新气泡可能落在截断之外，
         // 导致新页面与旧页面算出同一个键而被静默跳过）
-        if (app.deduper.duplicateText("$tag|$rawText", SYNC_WINDOW_MS)) return
+        val windowMs = if (matchNote) SYNC_WINDOW_MS else CHAT_SYNC_WINDOW_MS
+        if (app.deduper.duplicateText("$tag|$rawText", windowMs)) return
 
-        val since = System.currentTimeMillis() - SYNC_WINDOW_MS
+        val since = System.currentTimeMillis() - windowMs
         var added = 0
         val ids = ArrayList<Long>()
         rows.groupBy { "${it.type}|${Math.round(it.amount * 100)}|${it.note}" }.forEach { (_, group) ->
             val head = group.first()
             val existing = runCatching {
-                app.dao.countSimilar(head.amount, head.type, head.note, since)
+                app.dao.countSimilar(head.amount, head.type, if (matchNote) head.note else "", since)
             }.getOrDefault(0)
             val need = (group.size - existing).coerceIn(0, MAX_PER_GROUP)
             repeat(need) {
@@ -968,6 +984,9 @@ class AutoCaptureService : AccessibilityService() {
 
         /** 聊天/消息同步窗口（2 分钟）：窗内重扫不重复，超过就认为可能是新的一笔 */
         private const val SYNC_WINDOW_MS = 2 * 60 * 1000L
+
+        /** 聊天页的同步窗口（10 分钟）：同一笔转账在聊天页可能被反复扫到，窗口给长一点 */
+        private const val CHAT_SYNC_WINDOW_MS = 10 * 60 * 1000L
 
         /** 单组最多一次补多少条（防止误识别刷屏） */
         private const val MAX_PER_GROUP = 5

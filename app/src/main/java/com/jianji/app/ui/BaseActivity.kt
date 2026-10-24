@@ -32,6 +32,16 @@ open class BaseActivity : AppCompatActivity() {
         )
         applySystemPrivacy()
         applyGlassWindow()
+
+        // 使用前警告：未同意前提，每次进界面都弹（必须下拉读完才能「同意」/「拒绝」，
+        // 拒绝则退出应用）。之后可在「我的 → 使用前警告」里重新查看。
+        if (savedInstanceState == null) {
+            runCatching {
+                if (com.jianji.app.util.Disclaimer.needed(this)) {
+                    com.jianji.app.util.Disclaimer.show(this)
+                }
+            }.onFailure { AppLog.e("界面", it) }
+        }
     }
 
     private fun isNight(): Boolean =

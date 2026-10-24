@@ -120,31 +120,7 @@ class MainActivity : BaseActivity() {
     }
 
 
-    /**
-     * 首次启动的免责声明（开源版合规要求，只弹一次）。
-     * 不同意就退出，避免用户在不知情的情况下使用 Hook / root 功能。
-     */
-    private fun showDisclaimerIfNeeded() {
-        if (Prefs.isDisclaimerAccepted(this)) return
-        runCatching {
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("使用前请阅读")
-                .setMessage(
-                    "简记是个人学习作品，仅供本机自用。\n\n" +
-                        "· 全部数据只存在本机：应用没有联网权限，不会上传任何信息；\n" +
-                        "· 通过系统公开接口（通知 / 无障碍 / 通知监听 / dumpsys）读取信息，" +
-                        "不含任何第三方应用代码，也不修改第三方应用；\n" +
-                        "· Hook 与 root 功能可能与部分应用的用户协议冲突，请自行评估风险；\n" +
-                        "· 不提供绕过支付 / 破解 / 伪造数据的能力；\n" +
-                        "· 软件按原样提供，记账结果请自行核对，账本数据请定期导出备份。\n\n" +
-                        "继续使用即表示你已知悉以上内容。"
-                )
-                .setCancelable(false)
-                .setPositiveButton("我已知悉") { _, _ -> Prefs.setDisclaimerAccepted(this, true) }
-                .setNegativeButton("退出") { _, _ -> finish() }
-                .show()
-        }.onFailure { AppLog.e("界面", it) }
-    }
+
     /** 明细页滚动到一定位置后显示「回到最上方」（与「记一笔」对称的那个按钮） */
     fun setTopFabVisible(visible: Boolean) {
         if (binding.viewPager.currentItem != 0) return

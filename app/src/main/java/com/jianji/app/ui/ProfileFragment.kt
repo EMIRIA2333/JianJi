@@ -27,6 +27,9 @@ import com.jianji.app.util.GlassHelper
 import com.jianji.app.util.Money
 import com.jianji.app.util.Notifier
 import com.jianji.app.util.Prefs
+import com.jianji.app.util.TimeUtil
+import com.jianji.app.util.UpdateAgent
+import com.jianji.app.util.Disclaimer
 import com.jianji.app.util.RootManager
 import com.jianji.app.util.ServiceHealth
 import java.util.Locale
@@ -439,6 +442,45 @@ class ProfileFragment : Fragment() {
             }
         }
 
+        // 检查更新：只查询 GitHub Releases 的公开版本号（不做任何上传）
+        row(binding.rowUpdate).apply {
+            configureRow(
+                icon = R.drawable.ic_stat_record,
+                title = "检查更新",
+                subtitle = updateSubtitle(),
+                switch = false,
+                initial = false
+            ) {
+                if (!Prefs.isUpdateCheckEnabled(requireContext())) {
+                    toast("已关闭更新检查：可在下方重新开启")
+                    return@configureRow
+                }
+                toast("正在检查 GitHub 上的最新版本…")
+                UpdateAgent.checkNow(requireContext(), appVersionName()) { msg ->
+                    runCatching { toast(msg); refresh() }
+                }
+            }
+            root.setOnLongClickListener {
+                val on = !Prefs.isUpdateCheckEnabled(requireContext())
+                Prefs.setUpdateCheckEnabled(requireContext(), on)
+                toast(if (on) "已开启更新检查（仅访问 GitHub 公开版本号）" else "已关闭更新检查")
+                refresh()
+                true
+            }
+        }
+
+        // 使用前警告（可重新阅读，内容与首次启动时一致）
+        row(binding.rowDisclaimer).apply {
+            configureRow(
+                icon = R.drawable.ic_stat_record,
+                title = "使用前警告",
+                subtitle = if (Prefs.isDisclaimerAccepted(requireContext())) "已阅读并同意 · 点击重新查看" else "尚未同意",
+                switch = false,
+                initial = false
+            ) {
+                Disclaimer.show(requireActivity())
+            }
+        }
         // 自定义分类
         row(binding.rowCustomCat).apply {
             configureRow(
@@ -743,6 +785,26 @@ class ProfileFragment : Fragment() {
             .show()
     }
 
+    /** 当前应用版本名（如 3.18.0） */
+    private fun appVersionName(): String = runCatching {
+        requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName ?: "?"
+    }.getOrDefault("?")
+
+    /** 「检查更新」这一行的副标题：已是最新 / 有新版本 / 上次检查时间 */
+    private fun updateSubtitle(): String {
+        val ctx = requireContext()
+        if (!Prefs.isUpdateCheckEnabled(ctx)) return "已关闭（长按此行可重新开启）"
+        val latest = Prefs.latestVersion(ctx)
+        val cur = appVersionName()
+        val at = Prefs.lastUpdateCheckAt(ctx)
+        return when {
+            latest.isNotBlank() && com.jianji.app.core.UpdateChecker.isNewer(latest, cur) ->
+                "发现新版本 $latest（当前 $cur）· 点击查看"
+            latest.isNotBlank() -> "已是最新（$cur）"
+            at > 0 -> "上次检查：${TimeUtil.formatList(at)}（点一下再查）"
+            else -> "点击检查 GitHub 上的最新版本（仅查询版本号）"
+        }
+    }
     private fun row(b: ItemProfileRowBinding) = RowAccessor(b)
 
     /** 轻量包装，统一 include 布局的字段访问 */

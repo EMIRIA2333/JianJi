@@ -232,6 +232,15 @@
                 <include
                     android:id="@+id/rowAdvancedFix"
                     layout="@layout/item_profile_row" />
+
+                <!-- 检查更新：只查询 GitHub Releases 的公开版本号，不上传任何数据 -->
+                <include
+                    android:id="@+id/rowUpdate"
+                    layout="@layout/item_profile_row" />
+
+                <include
+                    android:id="@+id/rowDisclaimer"
+                    layout="@layout/item_profile_row" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

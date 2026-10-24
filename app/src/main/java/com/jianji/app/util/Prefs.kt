@@ -41,6 +41,9 @@ object Prefs {
     private const val KEY_LAST_NOTIFY_VIA = "last_notify_via"
     private const val KEY_LAST_HOOK_NOTIFY_AT = "last_hook_notify_at"
     private const val KEY_ROOT_SCAN_USER_SET = "root_scan_user_set"
+    private const val KEY_UPDATE_CHECK = "update_check_enabled"
+    private const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
+    private const val KEY_LATEST_VERSION = "latest_version"
     private const val KEY_HOOK_SILENT_WARNED = "hook_silent_warned_at"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_GLASS_MODE = "glass_mode"
@@ -122,6 +125,23 @@ object Prefs {
      * 只有在「无障碍完全用不了」时才建议打开，并把间隔调到 120 秒以上。
      */
     fun isRootAutoScan(c: Context): Boolean = sp(c).getBoolean(KEY_ROOT_AUTO_SCAN, false)
+    /**
+     * 「检查更新」开关（默认开）。
+     * 开启后只会访问 GitHub 的公开 Release 版本号，不收集、不上传任何数据。
+     */
+    fun isUpdateCheckEnabled(c: Context): Boolean = sp(c).getBoolean(KEY_UPDATE_CHECK, true)
+    fun setUpdateCheckEnabled(c: Context, v: Boolean) =
+        sp(c).edit().putBoolean(KEY_UPDATE_CHECK, v).apply()
+
+    fun lastUpdateCheckAt(c: Context): Long = sp(c).getLong(KEY_LAST_UPDATE_CHECK, 0L)
+    fun setLastUpdateCheckAt(c: Context, at: Long) =
+        sp(c).edit().putLong(KEY_LAST_UPDATE_CHECK, at).apply()
+
+    /** 上次查到的历史最新版本（用于界面显示"已是最新 / 有新版本 vX"） */
+    fun latestVersion(c: Context): String = sp(c).getString(KEY_LATEST_VERSION, "").orEmpty()
+    fun setLatestVersion(c: Context, v: String) =
+        sp(c).edit().putString(KEY_LATEST_VERSION, v).apply()
+
     /** 用户是否手动改过 root 扫描开关（改过就完全尊重用户，不再给默认建议） */
     fun isRootAutoScanSetByUser(c: Context): Boolean = sp(c).getBoolean(KEY_ROOT_SCAN_USER_SET, false)
     fun setRootAutoScanSetByUser(c: Context, v: Boolean) =
