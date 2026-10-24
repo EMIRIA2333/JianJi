@@ -61,6 +61,12 @@ object Disclaimer {
         val hint = view.findViewById<TextView>(R.id.tvScrollHint)
         tv.text = BODY
 
+        // 滚动区高度按屏幕算：小屏不会把正文挤没，大屏也不会太高
+        val dm = activity.resources.displayMetrics
+        val h = (dm.heightPixels * 0.52f).toInt()
+            .coerceIn((220 * dm.density).toInt(), (460 * dm.density).toInt())
+        sv.layoutParams = sv.layoutParams.apply { height = h }
+
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle("使用前请阅读")
             .setView(view)
