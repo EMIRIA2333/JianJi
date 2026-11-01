@@ -25,7 +25,12 @@ object UpdateChecker {
         val tagName: String,
         val releaseUrl: String,
         /** Release 说明（截断后用于展示） */
-        val notes: String
+        val notes: String,
+        /** APK 直链（应用内下载用）；没上传 APK 时为 null */
+        val apkUrl: String? = null,
+        /** APK 文件名与大小（展示用） */
+        val apkName: String = "",
+        val apkSize: Long = 0L
     )
 
     /** 解析 GitHub Releases API 的 JSON（够用就好，不引第三方 JSON 库） */
@@ -34,7 +39,8 @@ object UpdateChecker {
         val version = normalizeVersion(tag) ?: return null
         val url = json.stringField("html_url") ?: return null
         val notes = json.stringField("body").orEmpty()
-        return Latest(version, tag, url, notes.take(1500))
+        val apk = parseApkAsset(json)
+        return Latest(version, tag, url, notes.take(1500), apk?.first, apk?.second ?: "", apk?.third ?: 0L)
     }
 
     /** `v3.18.0` / `3.18.0` / `V3.18` → 规范化；解析不出来返回 null */
@@ -88,6 +94,22 @@ object UpdateChecker {
     }.getOrNull()
 
     // ---------------- 内部 ----------------
+
+    /**
+     * 从 Release JSON 里找 APK 资产：返回 (下载地址, 文件名, 大小)。
+     * GitHub 的 assets 数组里每个对象都有 name / browser_download_url / size。
+     */
+    fun parseApkAsset(json: String): Triple<String, String, Long>? {
+        val blocks = Regex("\\{[^{}]*\"name\"\\s*:\\s*\"([^\"]*\\.apk)\"[^{}]*\\}").findAll(json)
+        for (m in blocks) {
+            val block = m.value
+            val url = Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"").find(block)?.groupValues?.get(1) ?: continue
+            val name = m.groupValues[1]
+            val size = Regex("\"size\"\\s*:\\s*(\\d+)").find(block)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            return Triple(url, name, size)
+        }
+        return null
+    }
 
     /** 从简单 JSON 里取字符串字段（处理 \" 与 \\ 转义） */
     private fun String.stringField(name: String): String? {

@@ -456,8 +456,15 @@ class ProfileFragment : Fragment() {
                     return@configureRow
                 }
                 toast("正在检查 GitHub 上的最新版本…")
-                UpdateAgent.checkNow(requireContext(), appVersionName()) { msg ->
-                    runCatching { toast(msg); refresh() }
+                UpdateAgent.checkNow(requireContext(), appVersionName()) { msg, latest ->
+                    runCatching {
+                        refresh()
+                        if (latest != null && com.jianji.app.core.UpdateChecker.isNewer(latest.version, appVersionName())) {
+                            showUpdateDialog(latest)
+                        } else {
+                            toast(msg)
+                        }
+                    }
                 }
             }
             root.setOnLongClickListener {
@@ -785,6 +792,75 @@ class ProfileFragment : Fragment() {
             .show()
     }
 
+
+    /**
+     * 发现新版本的对话框：**应用内直接下载**（带进度），下完调起系统安装器。
+     * 没有 APK 资产时退回"去网页下载"。
+     * 注意：应用不会静默安装 —— 系统安装界面仍需用户点「安装」。
+     */
+    private fun showUpdateDialog(latest: com.jianji.app.core.UpdateChecker.Latest) {
+        val ctx = requireContext()
+        val sizeText = if (latest.apkSize > 0) "约 ${String.format("%.1f", latest.apkSize / 1024.0 / 1024.0)} MB" else ""
+        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
+            .setTitle("发现新版本 ${latest.version}")
+            .setMessage(
+                "当前版本：${appVersionName()}\n" +
+                    (if (sizeText.isNotBlank()) "安装包大小：$sizeText\n" else "") +
+                    "\n更新方式：下载后由系统安装器完成安装（需你确认）。\n升级前建议先在「我的 → 备份与导出」导出备份。"
+            )
+            .setPositiveButton("立即下载") { _, _ -> startDownload(latest) }
+            .setNeutralButton("网页下载") { _, _ ->
+                runCatching {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(latest.releaseUrl)))
+                }.onFailure { toast("无法打开浏览器") }
+            }
+            .setNegativeButton("稍后", null)
+        if (latest.apkUrl.isNullOrBlank()) {
+            builder.setPositiveButton("去网页下载") { _, _ ->
+                runCatching {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(latest.releaseUrl)))
+                }.onFailure { toast("无法打开浏览器") }
+            }
+        }
+        builder.show()
+    }
+
+    /** 下载进度对话框 + 调起安装 */
+    private fun startDownload(latest: com.jianji.app.core.UpdateChecker.Latest) {
+        val ctx = requireContext()
+        val bar = android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val box = android.widget.FrameLayout(ctx).apply {
+            setPadding(pad, pad, pad, pad)
+            addView(bar, android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
+        val progressDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
+            .setTitle("正在下载 ${latest.version}")
+            .setView(box)
+            .setCancelable(false)
+            .setNegativeButton("取消", null)
+            .create()
+        progressDialog.show()
+
+        UpdateAgent.downloadAndInstall(
+            ctx, latest,
+            onProgress = { p -> runCatching { if (p >= 0f) bar.progress = (p * 100).toInt() } },
+            onDone = { err ->
+                runCatching { progressDialog.dismiss() }
+                if (err == null) {
+                    toast("下载完成：请在弹出的系统界面点「安装」")
+                } else {
+                    toast(err)
+                }
+            }
+        )
+    }
     /** 当前应用版本名（如 3.18.0） */
     private fun appVersionName(): String = runCatching {
         requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName ?: "?"
