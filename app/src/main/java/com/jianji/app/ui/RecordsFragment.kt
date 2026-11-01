@@ -51,6 +51,9 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
     /** 0 = 本月，-1 = 上月，1 = 下月 */
     private var monthOffset = 0
 
+    /** 列表至少显示这么多条：不够就自动接上前几个月（连续账本，避免月初列表空白） */
+    private val MIN_LIST_ROWS = 12
+
     /** 柱状图当前显示的类型：false=支出（默认） true=收入 */
     private var chartIsIncome = false
     private var weekRecordsCache: List<Record> = emptyList()
@@ -180,7 +183,19 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
             weekRecordsCache = weekRecords
             weekStartCache = weekStart
 
-            val rows = buildRows(monthRecords)
+            // 明细是**连续账本**：如果本月条数不足一屏，自动把上月（必要时再往前）的记录接在后面。
+            // 否则月初只有一两笔，列表下面就是空白 —— 看起来像"上个月的账单不见了"（真实反馈）。
+            // 注意：只影响列表内容，顶部「月支出/月收入」仍然只统计**选中月份**。
+            val listRecords = ArrayList(monthRecords)
+            var olderStart = monthStart
+            var guard = 0
+            while (listRecords.size < MIN_LIST_ROWS && guard < 6) {
+                olderStart = TimeUtil.shiftMonth(olderStart, -1)
+                listRecords += app.dao.range(olderStart, TimeUtil.shiftMonth(olderStart, 1))
+                guard++
+            }
+
+            val rows = buildRows(listRecords)
             var expense = 0.0
             var income = 0.0
             monthRecords.forEach { if (it.type == RecordType.EXPENSE) expense += it.amount else income += it.amount }
