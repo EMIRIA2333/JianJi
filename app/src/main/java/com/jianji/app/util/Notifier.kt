@@ -557,6 +557,9 @@ object Notifier {
     /** 取消「Hook 收不到通知」提醒（用户点了"打开 root 扫描"之后） */
     fun cancelHookSilent(c: Context) = cancel(c, SERVICE_OFF_ID + 2)
 
+    /** 下载并调起安装后，撤掉"发现新版本"通知 */
+    fun cancelUpdate(c: Context) = cancel(c, UPDATE_ID)
+
     /** 兼容保留：确认页提醒（通知权限受限时的兜底路径） */
     fun notifyConfirm(
         c: Context,

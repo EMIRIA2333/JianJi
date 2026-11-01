@@ -2,4 +2,6 @@
 <paths>
     <!-- 导出的运行日志通过 FileProvider 分享 -->
     <files-path name="export" path="export/" />
+    <!-- 应用内下载的更新包（安装时通过 FileProvider 授权给系统安装器） -->
+    <external-files-path name="update" path="update/" />
 </paths>
