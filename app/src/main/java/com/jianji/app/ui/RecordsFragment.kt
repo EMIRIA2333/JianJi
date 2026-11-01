@@ -121,12 +121,31 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
 
     private fun load() {
         val app = requireActivity().application as App
-        val offset = monthOffset
+        var offset = monthOffset
         app.post {
             val now = System.currentTimeMillis()
-            val monthStart = TimeUtil.shiftMonth(TimeUtil.monthStart(now), offset)
-            val monthEnd = TimeUtil.shiftMonth(monthStart, 1)
-            val monthRecords = app.dao.range(monthStart, monthEnd)
+            var monthStart = TimeUtil.shiftMonth(TimeUtil.monthStart(now), offset)
+            var monthEnd = TimeUtil.shiftMonth(monthStart, 1)
+            var monthRecords = app.dao.range(monthStart, monthEnd)
+
+            // 每月 1 号最容易吓人：明细只显示**选中月份**，新月份还没记录 → 列表全空，
+            // 看起来像"账单被清空"（真实反馈）。这里在"停在当前月且本月一条记录都没有"时，
+            // 自动退到**最近一个有记录的月份**，并在顶部提示，不会再出现"账本像丢了"的错觉。
+            if (offset == 0 && monthRecords.isEmpty()) {
+                val latest = runCatching { app.dao.latestTime() }.getOrNull() ?: 0L
+                if (latest > 0 && latest < monthStart) {
+                    val targetStart = TimeUtil.monthStart(latest)
+                    val steps = monthsBetween(targetStart, monthStart)
+                    if (steps > 0) {
+                        offset = -steps
+                        monthStart = targetStart
+                        monthEnd = TimeUtil.shiftMonth(targetStart, 1)
+                        monthRecords = app.dao.range(monthStart, monthEnd)
+                        AppLog.i("界面", "本月暂无记录 → 自动显示 ${TimeUtil.formatMonthTitle(monthStart)}（$steps 个月前）")
+                    }
+                }
+            }
+            val shownOffset = offset
 
             val todayStart = TimeUtil.dayStart(now)
             val weekStart = TimeUtil.dayStart(todayStart - 6 * DAY_MS)
@@ -150,6 +169,7 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
 
             activity?.runOnUiThread {
                 if (_binding == null) return@runOnUiThread
+                monthOffset = shownOffset   // 回退过就把当前显示月份记住，切换按钮从这里继续
                 adapter.monthTitle = TimeUtil.formatMonthTitle(monthStart)
                 adapter.monthExpense = expense
                 adapter.monthIncome = income
@@ -173,6 +193,17 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
                 }
             }
         }
+    }
+
+    /** 从 earlier 到 later 相差几个月（用于把"最近一个有记录的月份"换算成 offset） */
+    private fun monthsBetween(earlier: Long, later: Long): Int {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = earlier }
+        val ey = cal.get(java.util.Calendar.YEAR)
+        val em = cal.get(java.util.Calendar.MONTH)
+        cal.timeInMillis = later
+        val ly = cal.get(java.util.Calendar.YEAR)
+        val lm = cal.get(java.util.Calendar.MONTH)
+        return (ly - ey) * 12 + (lm - em)
     }
 
     private fun buildRows(records: List<Record>): List<RecordsAdapter.Row> {
