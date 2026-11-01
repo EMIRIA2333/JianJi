@@ -67,7 +67,9 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
             binding.rvRecords.adapter = adapter
             // 切换主题会重建界面：恢复上次看的月份与列表位置，避免"回到最上方"
             val ctx = requireContext()
-            monthOffset = Prefs.recordsMonthOffset(ctx)
+            // 不再恢复上次看过的月份：每次打开都从**当前月**开始。
+            // 否则月初自动回退过之后会一直停在旧月份，新记的账永远看不到（真实 bug）。
+            monthOffset = 0
             binding.btnBatchCancel.setOnClickListener { exitSelection() }
             binding.btnBatchCategory.setOnClickListener { showBatchCategoryDialog() }
             binding.btnBatchTime.setOnClickListener { showBatchTimePicker() }
@@ -108,7 +110,7 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
         // 记住当前月份与滚动位置（切主题/重建后原地恢复）
         runCatching {
             val ctx = requireContext()
-            Prefs.setRecordsMonthOffset(ctx, monthOffset)
+            // 不持久化：月份偏移只在本次会话内有效（避免把自动回退的状态存下来）
             ScrollMemory.save(ctx, "records", binding.rvRecords)
         }
     }
