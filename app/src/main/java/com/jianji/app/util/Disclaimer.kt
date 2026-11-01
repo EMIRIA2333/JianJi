@@ -52,7 +52,10 @@ object Disclaimer {
     fun needed(activity: Activity): Boolean = !Prefs.isDisclaimerAccepted(activity)
 
     /**
-     * 展示警告（不可取消、不能点外部关闭）。未读到底部时两个按钮都不可点。
+     * 展示警告。两种模式：
+     * - **首次**（未同意）：必须下拉读完才能点「同意」/「拒绝」；拒绝 → 退出应用；
+     * - **重新查看**（已同意）：只提供「撤销同意」与「关闭」，**不要求滚到底部**；
+     *   撤销同意会清除标记并退出应用，下次进入重新弹出首次警告（用户明确要求）。
      */
     fun show(activity: Activity, onAgree: () -> Unit = {}) {
         val view = LayoutInflater.from(activity).inflate(R.layout.dialog_disclaimer, null, false)
@@ -67,6 +70,23 @@ object Disclaimer {
             .coerceIn((220 * dm.density).toInt(), (460 * dm.density).toInt())
         sv.layoutParams = sv.layoutParams.apply { height = h }
 
+        // ---- 已同意：重新查看 ----
+        if (Prefs.isDisclaimerAccepted(activity)) {
+            hint.text = "已阅读并同意 · 可在下方「撤销同意」"
+            MaterialAlertDialogBuilder(activity)
+                .setTitle("使用前警告")
+                .setView(view)
+                .setPositiveButton("关闭", null)
+                .setNegativeButton("撤销同意") { _, _ ->
+                    Prefs.setDisclaimerAccepted(activity, false)
+                    AppLog.i("设置", "用户撤销了使用前警告的同意 → 退出应用（下次启动会重新提示）")
+                    quit(activity)
+                }
+                .show()
+            return
+        }
+
+        // ---- 首次：必须读完 ----
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle("使用前请阅读")
             .setView(view)

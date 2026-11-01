@@ -23,7 +23,11 @@ object RecordWriter {
     fun insert(ctx: Context, r: Record): Long {
         val app = ctx.applicationContext as App
         val id = app.dao.insert(normalize(r))
-        if (id > 0) checkBudget(ctx)
+        if (id > 0) {
+            checkBudget(ctx)
+            // 让正在显示的明细页立刻刷新：否则"通知说已记，列表里却没有"（真实反馈）
+            runCatching { RecordsBus.notifyChanged() }
+        }
         return id
     }
 

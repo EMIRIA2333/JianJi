@@ -25,6 +25,7 @@ import com.jianji.app.util.AppLog
 import com.jianji.app.util.Money
 import com.jianji.app.util.GlassHelper
 import com.jianji.app.util.Prefs
+import com.jianji.app.util.RecordsBus
 import com.jianji.app.util.ScrollMemory
 import com.jianji.app.util.RecordWriter
 import com.jianji.app.util.TimeUtil
@@ -119,6 +120,25 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
 
     // ---------------- 数据加载 ----------------
 
+    /** 记账/删除后自动刷新（只在页面可见时注册，避免无谓刷新） */
+    private val recordsListener: () -> Unit = {
+        activity?.runOnUiThread {
+            runCatching {
+                if (_binding != null && isVisible) load()
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        RecordsBus.register(recordsListener)
+    }
+
+    override fun onStop() {
+        RecordsBus.unregister(recordsListener)
+        super.onStop()
+    }
+
     private fun load() {
         val app = requireActivity().application as App
         var offset = monthOffset
@@ -131,7 +151,12 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
             // 每月 1 号最容易吓人：明细只显示**选中月份**，新月份还没记录 → 列表全空，
             // 看起来像"账单被清空"（真实反馈）。这里在"停在当前月且本月一条记录都没有"时，
             // 自动退到**最近一个有记录的月份**，并在顶部提示，不会再出现"账本像丢了"的错觉。
-            if (offset == 0 && monthRecords.isEmpty()) {
+            val todayCount = runCatching {
+                app.dao.countInRange(TimeUtil.dayStart(now), TimeUtil.dayStart(now) + DAY_MS)
+            }.getOrDefault(0)
+            // 只有"本月一条都没有、且今天也没记过账"才回退：
+            // 一旦今天已经记了账，必须留在本月，否则新记录会"记了但看不到"（真实反馈）。
+            if (offset == 0 && monthRecords.isEmpty() && todayCount == 0) {
                 val latest = runCatching { app.dao.latestTime() }.getOrNull() ?: 0L
                 if (latest > 0 && latest < monthStart) {
                     val targetStart = TimeUtil.monthStart(latest)
