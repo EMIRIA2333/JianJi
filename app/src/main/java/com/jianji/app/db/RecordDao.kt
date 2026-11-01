@@ -286,6 +286,13 @@ class RecordDao(context: Context) {
      * 库里就该有几条（多退少补）。这样「同一商户每天扣同样金额」「反复测 0.01」
      * 都能各记一笔，而重复扫描同一页不会重复记。
      */
+    /** 最近一笔记录的时间（没有记录返回 0）：用于"本月还没记账 → 自动回退到有记录的月份" */
+    fun latestTime(): Long {
+        val sql = "SELECT MAX(time) FROM records WHERE $ACTIVE"
+        return helper.readableDatabase.rawQuery(sql, null).use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else 0L
+        }
+    }
     fun countSimilar(amount: Double, type: Int, note: String, since: Long): Int {
         val sql: String
         val args: Array<String>
