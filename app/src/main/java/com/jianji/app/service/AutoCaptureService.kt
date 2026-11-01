@@ -488,6 +488,7 @@ class AutoCaptureService : AccessibilityService() {
         }
         if (added > 0) {
             runCatching { RecordWriter.checkBudget(this) }
+            runCatching { com.jianji.app.util.RecordsBus.notifyChanged() }
             Notifier.notifyImported(this, label, "记好了 $added 笔，点「撤销」可反悔", ids.toLongArray())
             refreshStatusNotification()
         }

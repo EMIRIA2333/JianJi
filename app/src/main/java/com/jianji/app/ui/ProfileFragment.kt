@@ -481,7 +481,7 @@ class ProfileFragment : Fragment() {
             configureRow(
                 icon = R.drawable.ic_stat_record,
                 title = "使用前警告",
-                subtitle = if (Prefs.isDisclaimerAccepted(requireContext())) "已阅读并同意 · 点击重新查看" else "尚未同意",
+                subtitle = if (Prefs.isDisclaimerAccepted(requireContext())) "已同意 · 点击查看/撤销同意" else "尚未同意",
                 switch = false,
                 initial = false
             ) {
