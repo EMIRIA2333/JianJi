@@ -27,7 +27,9 @@ object ChatPaymentParser {
         val note: String,
         val payMethod: String,
         /** 该气泡对应的分类（转账出=人情，转账入=收款，红包出=人情，红包入=红包） */
-        val category: String
+        val category: String,
+        /** 命中的状态词（已收款 / 已被接收 / 已被领取…）：用来识别"同一笔转账的两个气泡" */
+        val marker: String = ""
     )
 
     /** 我转出去 / 我发出的红包（含「张三领取了你的红包」这种带名字的系统消息） */
@@ -111,11 +113,22 @@ object ChatPaymentParser {
                         isPacket -> "人情"
                         type == RecordType.INCOME -> "收款"
                         else -> "人情"
-                    }
+                    },
+                    marker = marker
                 )
             )
         }
-        return out
+        // 同一笔转账在聊天页会同时出现「已被接收」与「已收款」两个气泡（金额、时间都相同），
+        // 以前会记成「一支出 + 一收入」两条 —— 用户反馈的"一次支出一次付款"就是这个。
+        // 规则：同一金额同时出现收入与支出时，只保留**收入**那条（对方转给我）。
+        // 收窄规则：**只有转账的这两个状态词配对**（已被接收 + 已收款）且金额相同，才算同一笔。
+        // 红包、或金额不同的气泡一律不动（否则会把"同群两笔真实转账"误合并）。
+        val incomeReceived = out.filter { it.type == RecordType.INCOME && it.marker == "已收款" }
+        val drop = out.filter { e ->
+            e.type == RecordType.EXPENSE && e.marker == "已被接收" &&
+                incomeReceived.any { Math.round(it.amount * 100) == Math.round(e.amount * 100) }
+        }.toSet()
+        return out.filterNot { drop.contains(it) }
     }
 
     /**
@@ -188,6 +201,8 @@ object ChatPaymentParser {
             if (NOISE_TITLE.any { s == it || s.startsWith(it) }) return@forEach
             if (s.matches(Regex("[0-9.,¥￥+\\-:/\\s]+"))) return@forEach
             // 时间分隔（晚上 9:39 / 10月1日 21:00）不是名字
+            // 头像的无障碍文案（「XXX头像」）不是人名 —— 真实 bug：商户名被记成「エミリヤチャン头像」
+            if (s.contains("头像")) return@forEach
             if (s.matches(Regex(".*[0-9]{1,2}:[0-9]{2}.*"))) return@forEach
             if (s.contains(":")) return@forEach
             return s

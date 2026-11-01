@@ -739,7 +739,11 @@ class AutoCaptureService : AccessibilityService() {
             return
         }
 
-        if (!app.deduper.markPending(record.type, record.amount, merchant)) return
+        if (!app.deduper.markPending(record.type, record.amount, merchant)) {
+            // 同一笔已在等确认（多半是通知那条先弹了卡片）→ 留痕，避免"看起来没反应"
+            RecognitionLog.add("${PaymentParser.platformName(pkg)} 已在等待确认，跳过重复卡片：${Money.plain(record.amount)}")
+            return
+        }
 
         val pending = PendingRecord(
             amount = record.amount,

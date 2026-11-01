@@ -28,24 +28,23 @@ class ChatPaymentParserTest {
     """.trimIndent()
 
     @Test
-    fun parsesBothDirectionsFromOneChat() {
+    fun sameTransferShownAsTwoBubblesIsRecordedOnce() {
+        // 「已被接收」+「已收款」是**同一笔转账**的两个气泡（金额相同）。
+        // 以前会记成"一支出 + 一收入"两条 —— 用户反馈的 bug。现在只保留收入那条。
         val entries = ChatPaymentParser.parse(PaymentParser.PKG_WECHAT, mixedChat)
-        assertEquals(2, entries.size)
-        val sent = entries.first { it.type == RecordType.EXPENSE }
-        val received = entries.first { it.type == RecordType.INCOME }
-        assertEquals(0.5, sent.amount, 1e-9)
-        assertEquals(0.5, received.amount, 1e-9)
+        assertEquals(1, entries.size)
+        assertEquals(RecordType.INCOME, entries[0].type)
+        assertEquals(0.5, entries[0].amount, 1e-9)
     }
 
     @Test
-    fun categoryFollowsTheBubbleNotTheWholePage() {
-        // 同一个聊天里既有红包也有转账：分类必须按各自气泡来，
-        // 不能因为整页出现过「红包」就把收到的转账也标成红包（曾导致看起来像重复记账）
+    fun receivedTransferIsCategorizedAsIncome() {
+        // 同一笔转账的两个气泡合并后，剩下的是收入那条，分类必须是「收款」
+        // （不能因为整页出现过「红包」字样就把收到的转账标成红包）
         val entries = ChatPaymentParser.parse(PaymentParser.PKG_WECHAT, mixedChat)
-        val sent = entries.first { it.type == RecordType.EXPENSE }
-        val received = entries.first { it.type == RecordType.INCOME }
-        assertEquals("收款", received.category)   // 已收款 = 别人转给我
-        assertEquals("人情", sent.category)       // 已被接收 = 我转出去
+        assertEquals(1, entries.size)
+        assertEquals(RecordType.INCOME, entries[0].type)
+        assertEquals("收款", entries[0].category)
     }
 
     @Test
