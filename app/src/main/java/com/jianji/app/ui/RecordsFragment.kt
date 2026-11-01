@@ -67,9 +67,10 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
             binding.rvRecords.adapter = adapter
             // 切换主题会重建界面：恢复上次看的月份与列表位置，避免"回到最上方"
             val ctx = requireContext()
-            // 不再恢复上次看过的月份：每次打开都从**当前月**开始。
-            // 否则月初自动回退过之后会一直停在旧月份，新记的账永远看不到（真实 bug）。
-            monthOffset = 0
+            // 月份偏移**只在本进程内保留**（不持久化）：
+            // - 冷启动 → monthOffset 初始为 0 → 从当前月开始（避免"月初看起来账本空了"）；
+            // - 同一次会话里翻到别的月份 → 切页面/重建界面后保持不变（否则用户会觉得"只能看当月"）。
+            // 这里刻意不做任何重置。
             binding.btnBatchCancel.setOnClickListener { exitSelection() }
             binding.btnBatchCategory.setOnClickListener { showBatchCategoryDialog() }
             binding.btnBatchTime.setOnClickListener { showBatchTimePicker() }
@@ -172,7 +173,6 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
                     }
                 }
             }
-            val shownOffset = offset
 
             val todayStart = TimeUtil.dayStart(now)
             val weekStart = TimeUtil.dayStart(todayStart - 6 * DAY_MS)
@@ -196,7 +196,9 @@ class RecordsFragment : Fragment(), RecordsAdapter.Host {
 
             activity?.runOnUiThread {
                 if (_binding == null) return@runOnUiThread
-                monthOffset = shownOffset   // 回退过就把当前显示月份记住，切换按钮从这里继续
+                // 注意：这里**不要**把 shownOffset 写回 monthOffset。
+                // "本月无记录时回退到上月"只是**显示层**的临时选择，一旦今天记了账，
+                // 下一次刷新就会自然回到当前月；如果写回字段，用户就会一直停在旧月份（真实 bug）。
                 adapter.monthTitle = TimeUtil.formatMonthTitle(monthStart)
                 adapter.monthExpense = expense
                 adapter.monthIncome = income
