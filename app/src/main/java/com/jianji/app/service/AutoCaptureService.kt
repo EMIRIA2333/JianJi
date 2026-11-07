@@ -219,7 +219,11 @@ class AutoCaptureService : AccessibilityService() {
         // 空文本的内容变化事件（WebView 动画/光标闪烁等）信号价值低，再翻倍间隔
         if (!windowScan && evText.isNullOrEmpty() && !paymentApp) interval *= 2
         if (!retry) {
-            val lastRef = if (windowScan) lastWindowScan else lastContentScan
+            // 支付/账单类应用：不做退避、间隔压到 400/800ms。
+        // 退避本来是为省电，但它会惩罚"页面渲染慢"——真实日志里内容间隔被翻倍到 4000ms，
+        // 页面刚渲染完就不再扫了（"打开账单不记账"的一部分原因）。
+        if (paymentApp) interval = if (windowScan) 400L else 800L
+        val lastRef = if (windowScan) lastWindowScan else lastContentScan
             val last = lastRef.get()
             if (now - last < interval) {
                 AppLog.i("扫描", "跳过：距上次扫描 ${now - last}ms < 间隔 ${interval}ms（$pkg window=$windowScan）")
@@ -278,7 +282,20 @@ class AutoCaptureService : AccessibilityService() {
             "页面已扫描 $pkg（window=$windowScan retry=$retry）共 ${joined.length} 字：" +
                 joined.replace("\n", " ").take(120)
         )
-        if (joined.length < 4) return
+        if (joined.length < 4) {
+            // 极短文本：多半是 H5 / 自定义渲染页面 —— 无障碍层拿不到内容，无法页面识别。
+            // 写进识别记录，免得用户以为"功能坏了"（真实情况：微信账单/零钱明细就是这种页面）。
+            val now2 = System.currentTimeMillis()
+            if (now2 - lastMissLogAt > 20_000) {
+                lastMissLogAt = now2
+                RecognitionLog.add(
+                    PaymentParser.platformName(pkg) +
+                        " 页面内容对无障碍不可见（${joined.length} 字），无法页面识别；" +
+                        "这类页面只能靠通知/账单列表"
+                )
+            }
+            return
+        }
 
         // ⑥ 页面内容没变化就不重复解析（滚动停止后的事件尤其多）
         val hash = joined.hashCode()
