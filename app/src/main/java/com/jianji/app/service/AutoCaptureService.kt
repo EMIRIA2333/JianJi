@@ -273,6 +273,9 @@ class AutoCaptureService : AccessibilityService() {
                     .mapNotNull { w -> w.root?.let { collectText(it, ScanPolicy.nodeLimit(windowScan)) } }
                     .maxByOrNull { it.length }
             }.getOrNull().orEmpty()
+            if (alt.isEmpty()) {
+                AppLog.i("扫描", "取不到其它窗口（windows 为空）—— flagRetrieveInteractiveWindows 可能未生效")
+            }
             if (alt.length > joined.length) {
                 AppLog.i("扫描", "活动窗口只有 ${joined.length} 字，改用另一个窗口的 ${alt.length} 字")
                 joined = alt
@@ -993,6 +996,17 @@ class AutoCaptureService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        // 无障碍标志自检：改了 accessibilityFlags 后必须"重新启用无障碍服务"才会生效，
+        // 否则 windows 永远为空、H5 页面永远取不到文本（真实排查点）。
+        runCatching {
+            val flags = serviceInfo?.flags ?: 0
+            val includeNotImportant = flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS != 0
+            val retrieveWindows = flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0
+            AppLog.i("无障碍", "无障碍标志自检 includeNotImportant=$includeNotImportant retrieveWindows=$retrieveWindows flags=$flags")
+            if (!includeNotImportant || !retrieveWindows) {
+                RecognitionLog.add("无障碍标志未生效（includeNotImportant=$includeNotImportant retrieveWindows=$retrieveWindows）：请到系统设置把「简记」的无障碍关闭再打开一次")
+            }
+        }
         Notifier.ensureChannel(this)
         val listener = ServiceHealth.isNotificationListenerEnabled(this)
         RecognitionLog.add(
