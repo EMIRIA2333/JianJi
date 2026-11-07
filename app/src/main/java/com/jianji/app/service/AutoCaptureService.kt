@@ -258,7 +258,20 @@ class AutoCaptureService : AccessibilityService() {
         if (rootPkg != pkg) return
 
         // ⑤ 一次遍历直接拼成文本（省掉中间 List/join 的分配），并按事件类型限制节点数
-        val joined = collectText(root, ScanPolicy.nodeLimit(windowScan))
+        var joined = collectText(root, ScanPolicy.nodeLimit(windowScan))
+        if (joined.length < 8) {
+            // H5 账单页的活动窗口常常只是个空容器，真正的文本在另一个窗口里
+            val alt = runCatching {
+                windows.orEmpty()
+                    .filter { it.root?.packageName?.toString() == pkg }
+                    .mapNotNull { w -> w.root?.let { collectText(it, ScanPolicy.nodeLimit(windowScan)) } }
+                    .maxByOrNull { it.length }
+            }.getOrNull().orEmpty()
+            if (alt.length > joined.length) {
+                AppLog.i("扫描", "活动窗口只有 ${joined.length} 字，改用另一个窗口的 ${alt.length} 字")
+                joined = alt
+            }
+        }
         // 页面扫描留痕：这是排查"打开账单不记账"的关键（能看到到底扫到了什么）
         AppLog.i(
             "扫描",
