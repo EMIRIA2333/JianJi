@@ -194,9 +194,11 @@ class AutoCaptureService : AccessibilityService() {
         // ⓪ 只处理**当前前台应用**的事件。
         //    MIUI 偶尔会把已经退到后台的窗口事件再投递一次，那会让扫描发生在旧界面上
         //    （用户反馈："识别到的总是最后打开过的那个支付/购物应用"）。
+        // 注意：这里**不能**直接 return。这个"前台校验"是 10 月才加的门，
+        // 加了之后页面识别就时好时坏（用户反馈"以前能记，现在不行"）。
+        // 现在只记录信息，不拦。
         if (pkg != foregroundPkg) {
-            AppLog.i("扫描", "跳过：不是当前前台（$pkg，前台=${foregroundPkg.ifBlank { "未知" }}）")
-            return
+            AppLog.i("扫描", "前台不一致（$pkg，前台=${foregroundPkg.ifBlank { "未知" }}）—— 仍然继续扫描")
         }
 
         // ① 事件文本预筛（纯 CPU，最便宜）：内容变化事件占绝大多数（滚动/打字/动画都会触发），
@@ -207,7 +209,7 @@ class AutoCaptureService : AccessibilityService() {
         // 支付/账单类应用里，"文本为空"的内容变化也必须扫：
         // 很多页面（聊天、账单详情的 WebView）变化时不带文本，以前会被 looksInteresting("") 直接丢掉，
         // 表现就是"必须下拉一下通知栏才会记录"（下拉会触发带文本的事件）。
-        if (!windowScan && !retry && !ScanPolicy.looksInteresting(evText) && !(paymentApp && evText.isNullOrEmpty())) {
+        if (!paymentApp && !windowScan && !retry && !ScanPolicy.looksInteresting(evText)) {
             AppLog.i("扫描", "跳过：事件文本与钱无关（$pkg，len=${evText?.length ?: 0}）")
             return
         }
@@ -299,7 +301,8 @@ class AutoCaptureService : AccessibilityService() {
 
         // ⑥ 页面内容没变化就不重复解析（滚动停止后的事件尤其多）
         val hash = joined.hashCode()
-        if (hash == lastPageHash) {
+        if (hash == lastPageHash && !windowScan) {
+            // 内容没变且不是窗口切换 → 跳过（滚动停止后的事件很多，这是省电的关键）
             noteScanResult(false)
             return
         }
