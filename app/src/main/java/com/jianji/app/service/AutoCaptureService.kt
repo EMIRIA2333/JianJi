@@ -31,6 +31,7 @@ import com.jianji.app.util.AppLog
 import com.jianji.app.util.CategoryLearner
 import com.jianji.app.util.Money
 import com.jianji.app.util.Notifier
+import com.jianji.app.util.OcrCapture
 import com.jianji.app.util.PendingRecord
 import com.jianji.app.util.Prefs
 import com.jianji.app.util.RecognitionLog
@@ -105,6 +106,14 @@ class AutoCaptureService : AccessibilityService() {
     /** 上次记录「页面未识别」的时间（限流，避免刷屏） */
     @Volatile
     private var lastMissLogAt = 0L
+
+    /** 上一个页面是否为"无障碍不可见"的 H5 页面（决定是否轮询触发 OCR） */
+    @Volatile private var foregroundH5 = false
+    /** 上次 H5 轮询触发 OCR 的时间（轮询自身节流） */
+    @Volatile private var lastOcrPollAt = 0L
+    /** 上一次 OCR 文本的哈希：同一页面不重复解析（省电 + 防重复记账） */
+    @Volatile private var lastOcrHash = 0
+    private val pollHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var overlay: RecordOverlay? = null
@@ -287,16 +296,22 @@ class AutoCaptureService : AccessibilityService() {
             "页面已扫描 $pkg（window=$windowScan retry=$retry）共 ${joined.length} 字：" +
                 joined.replace("\n", " ").take(120)
         )
+        foregroundH5 = joined.length < 4
         if (joined.length < 4) {
-            // 极短文本：多半是 H5 / 自定义渲染页面 —— 无障碍层拿不到内容，无法页面识别。
-            // 写进识别记录，免得用户以为"功能坏了"（真实情况：微信账单/零钱明细就是这种页面）。
+            // 极短文本 = H5 / 自定义渲染页面（微信账单、零钱明细、转账详情都是这种）：
+            // 无障碍层完全看不到内容（实测 uiautomator dump 只有 1 个空节点）→ 改用**截图 OCR**。
+            if (paymentApp) {
+                OcrCapture.recognize(this) { ocrText ->
+                    AppLog.i("扫描", "截图 OCR ${ocrText.length} 字：" + ocrText.replace("\n", " ").take(100))
+                    if (ocrText.length >= 8) handleOcrText(pkg, ocrText)
+                }
+            }
             val now2 = System.currentTimeMillis()
             if (now2 - lastMissLogAt > 20_000) {
                 lastMissLogAt = now2
                 RecognitionLog.add(
                     PaymentParser.platformName(pkg) +
-                        " 页面内容对无障碍不可见（${joined.length} 字），无法页面识别；" +
-                        "这类页面只能靠通知/账单列表"
+                        " 页面对无障碍不可见（${joined.length} 字），已尝试截图识别"
                 )
             }
             return
@@ -990,6 +1005,80 @@ class AutoCaptureService : AccessibilityService() {
         return if (sb.length > MAX_TEXT) sb.substring(0, MAX_TEXT) else sb.toString()
     }
 
+
+    /**
+     * H5 页面兜底轮询。
+     *
+     * 微信的账单/零钱明细/转账详情是 H5 页面，**完全屏蔽无障碍**：
+     * 既取不到文本，也**不产生任何页面切换事件**，所以"等事件"永远等不到。
+     * 这里在前台是 H5 页面（无障碍取字 < 4）时每 3 秒尝试一次截图 OCR，
+     * OCR 内部还有 15 秒限流 + 内容指纹去重，耗电可控。
+     */
+    private val h5Poller = object : Runnable {
+        override fun run() {
+            runCatching {
+                if (Prefs.isAutoEnabled(this@AutoCaptureService) &&
+                    foregroundH5 &&
+                    foregroundPkg.isNotBlank() &&
+                    isPageScanPkg(foregroundPkg) &&
+                    System.currentTimeMillis() - lastOcrPollAt > 1_200
+                ) {
+                    lastOcrPollAt = System.currentTimeMillis()
+                    AppLog.i("扫描", "H5 轮询：尝试截图 OCR（${foregroundPkg}）")
+                    OcrCapture.recognize(this@AutoCaptureService) { text ->
+                        AppLog.i("扫描", "轮询 OCR ${text.length} 字：" + text.replace("\n", " ").take(100))
+                        if (text.length >= 8) handleOcrText(foregroundPkg, text)
+                    }
+                }
+            }
+            pollHandler.postDelayed(this, 1_200)
+        }
+    }
+
+    /** 把 OCR 文本当页面文本解析并记账（无障碍取不到内容的 H5 页面用） */
+    private fun handleOcrText(pkg: String, ocrText: String) {
+        // ⚠️ 防止「OCR 拍到简记自己的确认卡片」形成回路：
+        // 卡片上写着「识别到收入 +¥910.00 … 点击「保存」直接记账 … 确认账单 金额 910.00」，
+        // 以前会被再识别一次 → 金额变成 910（真实 bug）。
+        val selfMarkers = listOf(
+            "识别到收入", "识别到支出", "确认账单", "点击「保存」", "点击保存",
+            "分类(点击更换)", "分类（点击更换）", "简记 · 自动记账"
+        )
+        if (selfMarkers.any { ocrText.contains(it) }) {
+            AppLog.i("扫描", "OCR 拍到的是简记自己的确认卡片/通知，跳过")
+            return
+        }
+        val app = applicationContext as App
+        app.post {
+            val receipt = ReceiptParser.parse(pkg, ocrText)
+            if (receipt == null) {
+                RecognitionLog.add(
+                    PaymentParser.platformName(pkg) + " 截图识别未通过：" +
+                        ReceiptParser.lastRejectReason.ifBlank { "内容不像账单页" }
+                )
+                return@post
+            }
+            val record = Record(
+                amount = receipt.amount,
+                type = receipt.type,
+                category = rememberCategory(
+                    app, receipt.merchant, receipt.type, receipt.categoryHint,
+                    allowMemory = receipt.platformCategory == null
+                ),
+                note = receipt.merchant,
+                tag = if (Prefs.isExtractRemark(this)) receipt.remark else "",
+                payMethod = receipt.payMethod,
+                source = PaymentParser.sourceOf(pkg),
+                time = receipt.time ?: System.currentTimeMillis()
+            )
+            RecognitionLog.add(
+                PaymentParser.platformName(pkg) + " 截图识别 → " +
+                    (if (record.type == RecordType.INCOME) "收入 " else "支出 ") +
+                    Money.plain(record.amount) + " · " + record.displayName
+            )
+            dispatch(app, record, ocrText, pkg, withImage = false)
+        }
+    }
     override fun onInterrupt() {
         // 无需处理
     }
@@ -1008,6 +1097,13 @@ class AutoCaptureService : AccessibilityService() {
             }
         }
         Notifier.ensureChannel(this)
+        // 预热 OCR 模型（否则第一次识别要 2~5 秒）
+        runCatching { OcrCapture.warmUp() }
+        // H5 页面不产生无障碍事件 → 启动轮询兜底
+        runCatching {
+            pollHandler.removeCallbacks(h5Poller)
+            pollHandler.postDelayed(h5Poller, 1_200)
+        }
         val listener = ServiceHealth.isNotificationListenerEnabled(this)
         RecognitionLog.add(
             "无障碍服务已连接" + if (listener) "；通知读取也已开启（双通道）" else "（建议再开「通知使用权」，不弹通知也能记）"

@@ -10,8 +10,8 @@ android {
         applicationId = "com.jianji.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 91
-        versionName = "3.20.1-test8"
+        versionCode = 101
+        versionName = "3.21.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -64,6 +64,8 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    // 本地 OCR：只用于「无障碍拿不到内容的页面」（微信 H5 账单/转账详情页）
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     testImplementation("junit:junit:4.13.2")
     // Xposed/LSPosed API：仅编译期需要（运行时由框架提供），不会打进 APK
     compileOnly(project(":xposed-stubs"))

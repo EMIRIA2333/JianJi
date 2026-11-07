@@ -11,6 +11,7 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows|flagReportViewIds"
     android:canRetrieveWindowContent="true"
+      android:canTakeScreenshot="true"
     android:notificationTimeout="400"
     android:packageNames="com.tencent.mm,com.eg.android.AlipayGphone,com.sankuai.meituan.takeoutnew,com.sankuai.meituan,me.ele,com.taobao.taobao,com.tmall.wireless,com.jingdong.app.mall,com.xunmeng.pinduoduo,com.smile.gifmaker,com.achievo.vipshop,com.suning.mobile.ebuy,com.sdu.didi.psnger,com.jingyao.easybike,com.MobileTicket,com.ctrip.android.view,com.Qunar,com.unionpay"
     android:description="@string/accessibility_service_desc" />
