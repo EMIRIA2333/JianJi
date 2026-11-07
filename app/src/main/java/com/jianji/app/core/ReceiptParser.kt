@@ -75,9 +75,25 @@ object ReceiptParser {
 
     /**
      * 转账详情页方向：微信/支付宝在「我付款」时列的是**收款方**，在「我收款」时列的是**付款方**。
-     * 两个都出现（或都没出现）说明无法判断谁是我，返回 null 不记账。
+     *
+     * 但真实页面还有两种更强的写法（以前只认标签，导致这些页直接不记）：
+     * - 「转账-**来自**李四」+「当前状态 **已存入零钱**」→ 我收到的（收入）；
+     * - 「转账-**给**张三」/「已转账给」→ 我付出的（支出）。
+     * 所以先看这两种明确写法，再退回收款方/付款方标签。
      */
     fun transferDirection(text: String): Int? {
+        // ① 明确写法（最可靠）
+        if (text.contains("转账-来自") || text.contains("转账—来自") ||
+            text.contains("已存入零钱") || text.contains("已转入零钱")
+        ) {
+            return RecordType.INCOME
+        }
+        if (text.contains("转账-给") || text.contains("转账—给") ||
+            text.contains("已转账给") || text.contains("对方已收款")
+        ) {
+            return RecordType.EXPENSE
+        }
+        // ② 收款方/付款方标签
         val hasPayee = text.contains("收款方")
         val hasPayer = text.contains("付款方")
         return when {
@@ -168,6 +184,10 @@ object ReceiptParser {
     /** 商户名排除词：这些行不是商户（含推广/活动文案与按钮） */
     private val NOT_MERCHANT = listOf(
         "账单详情", "全部账单", "交易成功", "支付成功", "当前状态", "收款方", "商户", "时间", "方式",
+        // 平台名与页面结构词不能当商户（真实 bug：「微信支付账单详情」的商户被记成"微信"，
+        // 而正确的商户是金额上方那行「示例便利店」）
+        "微信", "支付宝", "零钱明细", "零钱余额", "零钱", "账单服务", "转账说明", "转账单号",
+        "转账时间", "收款时间", "转账-来自", "转账-给", "定位到聊天位置", "申请转账电子凭证", "查看往来交易",
         "单号", "分类", "标签", "更多", "推荐服务", "免密", "积分", "领取", "商品说明", "直接付款",
         "已记账", "记一笔", "服务", "状态", "金额", "查询", "投诉", "说明", "备注", "收起", "展开",
         "限时", "立减", "随机", "免息", "分期", "活动", "优惠", "红包", "抽奖", "开通", "领取",
@@ -179,23 +199,34 @@ object ReceiptParser {
         "我也要制作", "红包", "转账时间", "收款时间"
     )
 
+    /** 上一次被拒的原因（仅用于日志/识别记录，解析只在后台线程调用） */
+    @Volatile
+    var lastRejectReason: String = ""
+        private set
+
+    private fun reject(reason: String): Parsed? {
+        lastRejectReason = reason
+        return null
+    }
+
     fun parse(pkg: String, screenText: String): Parsed? {
+        lastRejectReason = ""
         val text = screenText.replace('\u00A0', ' ')
-        if (text.length < 8) return null
+        if (text.length < 8) return reject("文本太短")
         // 聊天页不是账单：一页里可能同时存在「我发出去的」和「别人发给我的」，
         // 曾出现「转账给对方却记成收入」的问题 —— 直接不解析，
         // 转账/红包请从「账单详情页」或「零钱明细」识别
-        if (CHAT_MARKERS.any { text.contains(it) }) return null
+        CHAT_MARKERS.firstOrNull { text.contains(it) }?.let { return reject("聊天页特征「$it」") }
         // 尚未完成支付的页面（付款键盘 / 待支付 / 失败）不能记账
-        if (PENDING_STATE.any { text.contains(it) }) return null
+        PENDING_STATE.firstOrNull { text.contains(it) }?.let { return reject("未完成支付「$it」") }
         // 月账单/收支汇总页：顶部是"支出/收入/本月已省"这类**汇总数字**，不是一笔交易 → 不记
-        if (SUMMARY_MARKERS.count { text.contains(it) } >= 2) return null
+        SUMMARY_MARKERS.filter { text.contains(it) }.takeIf { it.size >= 2 }?.let { return reject("月账单汇总页（${it.joinToString("/")}）") }
         // 账单「列表页」（多行金额 + 日期分组）交给 BillListParser 处理，
         // 否则会把列表里的某一行当成单笔详情记一条错账
-        if (isListPage(text)) return null
-        val evidence = STRONG.firstOrNull { text.contains(it) } ?: return null
+        if (isListPage(text)) return reject("这是账单列表页（交给列表补齐）")
+        val evidence = STRONG.firstOrNull { text.contains(it) } ?: return reject("缺少支付成功等强证据")
 
-        val negated = extractAmount(text) ?: return null
+        val negated = extractAmount(text) ?: return reject("没提取到金额")
         val amount = Math.abs(negated)
 
         val platformCategory = extractPlatformCategory(text)
@@ -204,13 +235,13 @@ object ReceiptParser {
 
         // 红包特判：只有明确「我发出的 / 我收到的」状态才记账
         val redPacket = if (text.contains("红包")) redPacketDirection(text) else null
-        if (text.contains("红包") && redPacket == null) return null
+        if (text.contains("红包") && redPacket == null) return reject("红包方向不明")
 
         // 转账详情页：用「收款方 / 付款方」标签判断方向（比状态词可靠），
         // 两个标签都出现或都不出现时无法判断，宁可不记
         val isTransferDetail = TRANSFER_DETAIL_FIELDS.any { text.contains(it) }
         val transferType = if (isTransferDetail) transferDirection(text) else null
-        if (isTransferDetail && transferType == null) return null
+        if (isTransferDetail && transferType == null) return reject("转账方向不明（缺收款方/付款方）")
 
         // 方向判定优先级：
         // 转账详情页 > 红包特判 > 平台分类（如「账单分类 退款/收款」）> 状态词 > 金额符号
@@ -414,6 +445,12 @@ object ReceiptParser {
     }
 
     fun extractMerchant(text: String): String? {
+        // 转账详情页 / 零钱明细：「转账-来自李四」「转账-给张三」里的名字就是对方
+        // （以前会落到兜底文案「微信转账」，商户名就丢了）
+        Regex("转账[-—]?(?:来自|给)\\s*([^\\n]{1,20})").find(text)?.let { m ->
+            val name = m.groupValues[1].trim().trimEnd('的', ' ', '（', '(')
+            if (name.length in 1..20) return name
+        }
         MERCHANT_PATTERNS.forEach { p ->
             val m = p.matcher(text)
             if (m.find()) {
