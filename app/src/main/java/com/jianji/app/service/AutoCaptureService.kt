@@ -27,6 +27,7 @@ import com.jianji.app.core.ServiceMessageParser
 import com.jianji.app.db.RecordDao
 import com.jianji.app.ui.EditRecordActivity
 import com.jianji.app.ui.overlay.RecordOverlay
+import com.jianji.app.util.AppLog
 import com.jianji.app.util.CategoryLearner
 import com.jianji.app.util.Money
 import com.jianji.app.util.Notifier
@@ -193,7 +194,10 @@ class AutoCaptureService : AccessibilityService() {
         // ⓪ 只处理**当前前台应用**的事件。
         //    MIUI 偶尔会把已经退到后台的窗口事件再投递一次，那会让扫描发生在旧界面上
         //    （用户反馈："识别到的总是最后打开过的那个支付/购物应用"）。
-        if (pkg != foregroundPkg) return
+        if (pkg != foregroundPkg) {
+            AppLog.i("扫描", "跳过：不是当前前台（$pkg，前台=${foregroundPkg.ifBlank { "未知" }}）")
+            return
+        }
 
         // ① 事件文本预筛（纯 CPU，最便宜）：内容变化事件占绝大多数（滚动/打字/动画都会触发），
         //    若事件自带的变更文本与钱无关，直接跳过整棵树遍历 —— 这是最省电的一步。
@@ -203,7 +207,10 @@ class AutoCaptureService : AccessibilityService() {
         // 支付/账单类应用里，"文本为空"的内容变化也必须扫：
         // 很多页面（聊天、账单详情的 WebView）变化时不带文本，以前会被 looksInteresting("") 直接丢掉，
         // 表现就是"必须下拉一下通知栏才会记录"（下拉会触发带文本的事件）。
-        if (!windowScan && !retry && !ScanPolicy.looksInteresting(evText) && !(paymentApp && evText.isNullOrEmpty())) return
+        if (!windowScan && !retry && !ScanPolicy.looksInteresting(evText) && !(paymentApp && evText.isNullOrEmpty())) {
+            AppLog.i("扫描", "跳过：事件文本与钱无关（$pkg，len=${evText?.length ?: 0}）")
+            return
+        }
 
         // ② 间隔与自适应退避（一次原子读 + 比较）；系统省电 / 低电量未充电时进一步降频
         val batterySaver = isBatterySaverOn() || isLowBattery()
@@ -214,7 +221,10 @@ class AutoCaptureService : AccessibilityService() {
         if (!retry) {
             val lastRef = if (windowScan) lastWindowScan else lastContentScan
             val last = lastRef.get()
-            if (now - last < interval) return
+            if (now - last < interval) {
+                AppLog.i("扫描", "跳过：距上次扫描 ${now - last}ms < 间隔 ${interval}ms（$pkg window=$windowScan）")
+                return
+            }
             if (!lastRef.compareAndSet(last, now)) return
         } else {
             lastContentScan.set(now)
@@ -249,6 +259,12 @@ class AutoCaptureService : AccessibilityService() {
 
         // ⑤ 一次遍历直接拼成文本（省掉中间 List/join 的分配），并按事件类型限制节点数
         val joined = collectText(root, ScanPolicy.nodeLimit(windowScan))
+        // 页面扫描留痕：这是排查"打开账单不记账"的关键（能看到到底扫到了什么）
+        AppLog.i(
+            "扫描",
+            "页面已扫描 $pkg（window=$windowScan retry=$retry）共 ${joined.length} 字：" +
+                joined.replace("\n", " ").take(120)
+        )
         if (joined.length < 4) return
 
         // ⑥ 页面内容没变化就不重复解析（滚动停止后的事件尤其多）
@@ -313,6 +329,8 @@ class AutoCaptureService : AccessibilityService() {
                     }
                 }
             }
+
+            AppLog.i("扫描", "财务页解析未命中：ReceiptParser=${ReceiptParser.lastRejectReason.ifBlank { "非账单详情页" }}")
 
             // 5) 通用规则兜底：必须是「像账单页」的页面（含支付时间/交易单号/商户等字段），
             //    避免把普通列表页里的数字当成金额
