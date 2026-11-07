@@ -55,6 +55,9 @@ object Notifier {
     /** 新版本提醒 */
     private const val UPDATE_ID = 9906
 
+    /** 一天毫秒数（刷新"今日已记"计数用） */
+    private const val DAY_MS = 24L * 60 * 60 * 1000
+
     /** root 自动读通知的前台服务通知 id */
     const val ROOT_SCAN_ID = 9904
 
@@ -173,6 +176,29 @@ object Notifier {
      * @param currentApp 当前前台应用名（无障碍可识别）；为空表示未知
      * @param hookActive Hook 直读是否已生效 —— 生效时文案要说明"不需要无障碍"
      */
+    /** 最近一次传给常驻通知的「当前应用」与「Hook 状态」，供 [refreshStatusCount] 复用，避免副标题被清空 */
+    @Volatile private var lastCurrentApp: String = ""
+    @Volatile private var lastHookActive: Boolean = false
+
+    /**
+     * 重新计算「今日已记 N 笔」并刷新常驻通知。
+     *
+     * 之前只在少数几条路径里刷新，导致"通知显示 4 笔、明细里却有 5 笔"（真实反馈）。
+     * 现在 `RecordWriter.insert` 每次成功入库都会调用它，计数永远与账本一致。
+     */
+    fun refreshStatusCount(c: Context) {
+        main.post {
+            runCatching {
+                val app = c.applicationContext as com.jianji.app.App
+                app.post {
+                    val start = TimeUtil.dayStart(System.currentTimeMillis())
+                    val n = runCatching { app.dao.countInRange(start, start + DAY_MS) }.getOrDefault(0)
+                    updateStatusNotification(c, true, n, lastCurrentApp, lastHookActive)
+                }
+            }
+        }
+    }
+
     fun updateStatusNotification(
         c: Context,
         enabled: Boolean,
@@ -180,6 +206,9 @@ object Notifier {
         currentApp: String = "",
         hookActive: Boolean = false
     ) {
+        // 记住最近一次的内容，供 refreshStatusCount 复用，避免副标题被清空
+        lastCurrentApp = currentApp
+        lastHookActive = hookActive
         main.post {
             ensureChannel(c)
             if (!enabled) {

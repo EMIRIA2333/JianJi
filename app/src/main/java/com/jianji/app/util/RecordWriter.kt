@@ -27,6 +27,8 @@ object RecordWriter {
             checkBudget(ctx)
             // 让正在显示的明细页立刻刷新：否则"通知说已记，列表里却没有"（真实反馈）
             runCatching { RecordsBus.notifyChanged() }
+            // 常驻通知的「今日已记 N 笔」也立刻重算，避免"显示 4 笔、实际 5 笔"
+            runCatching { Notifier.refreshStatusCount(ctx) }
         }
         return id
     }
