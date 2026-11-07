@@ -108,6 +108,18 @@ object ReceiptParser {
         "付款金额", "消费成功", "支出", "转账成功 支出"
     )
 
+    /**
+     * **月账单 / 收支汇总页**的特征词。
+     *
+     * 真实 bug：支付宝「11月」账单页顶部有「支出 ¥189.87 / 收入 ¥0.00 / 本月已省 …」，
+     * 这些是**汇总数字**，不是一笔交易 —— 以前会被当成一笔「+189.87 收入」记下来。
+     * 命中 ≥2 个特征就认定是汇总页，直接不解析（单笔详情页不会同时出现这些）。
+     */
+    private val SUMMARY_MARKERS = listOf(
+        "本月已省", "收支分析", "搜索交易记录", "月账单", "本月支出", "本月收入",
+        "账单统计", "月度账单", "全部账单", "较上月", "笔交易", "笔支出"
+    )
+
     private val LABELED_AMOUNT = Pattern.compile(
         "(?:支付金额|付款金额|交易金额|订单金额|实付金额|实付款|退款金额|收款金额|金额)[:：]?\\s*[¥￥]?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"
     )
@@ -176,6 +188,8 @@ object ReceiptParser {
         if (CHAT_MARKERS.any { text.contains(it) }) return null
         // 尚未完成支付的页面（付款键盘 / 待支付 / 失败）不能记账
         if (PENDING_STATE.any { text.contains(it) }) return null
+        // 月账单/收支汇总页：顶部是"支出/收入/本月已省"这类**汇总数字**，不是一笔交易 → 不记
+        if (SUMMARY_MARKERS.count { text.contains(it) } >= 2) return null
         // 账单「列表页」（多行金额 + 日期分组）交给 BillListParser 处理，
         // 否则会把列表里的某一行当成单笔详情记一条错账
         if (isListPage(text)) return null
