@@ -140,6 +140,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:text="支付方式 / 支出工具"
+                android:tag="payMethodLabel"
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 

@@ -45,6 +45,15 @@ class AddRecordActivity : BaseActivity() {
 
     /** 支付方式 / 支出工具（可再次点击取消选择） */
     private fun renderPayMethods() {
+        // 收入时文案改成"收款方式 / 收入来源"，不再显示"支出工具"
+        runCatching {
+            binding.root.findViewWithTag<android.widget.TextView>("payMethodLabel")?.text =
+                if (binding.toggleType.checkedButtonId == R.id.btnIncome) {
+                    "收款方式 / 收入来源（点击选择）"
+                } else {
+                    "支付方式 / 支出工具（点击选择）"
+                }
+        }
         binding.cgPayMethods.removeAllViews()
         EditRecordActivity.COMMON_PAY_METHODS.forEach { name ->
             val chip = Chip(this).apply {

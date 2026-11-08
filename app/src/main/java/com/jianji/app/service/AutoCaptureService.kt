@@ -1017,10 +1017,15 @@ class AutoCaptureService : AccessibilityService() {
     private val h5Poller = object : Runnable {
         override fun run() {
             runCatching {
+                // ⚠️ 必须用**真实前台**判断：foregroundPkg 只由无障碍事件更新，
+                // 闲鱼这类不在监听列表里的应用不会更新它 → 会一直以为"还在微信里"，
+                // 于是对着闲鱼屏幕疯狂 OCR（用户反馈：太耗电 + 误记账）。
+                val fgIsWatched = foregroundPkg.isNotBlank() &&
+                    isPageScanPkg(foregroundPkg) &&
+                    isSourceAppForeground(foregroundPkg)
                 if (Prefs.isAutoEnabled(this@AutoCaptureService) &&
                     foregroundH5 &&
-                    foregroundPkg.isNotBlank() &&
-                    isPageScanPkg(foregroundPkg) &&
+                    fgIsWatched &&
                     System.currentTimeMillis() - lastOcrPollAt > 1_200
                 ) {
                     lastOcrPollAt = System.currentTimeMillis()

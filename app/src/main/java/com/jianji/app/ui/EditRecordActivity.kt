@@ -225,6 +225,15 @@ class EditRecordActivity : BaseActivity() {
 
     /** 支付方式 / 支出工具选择（含识别到的或自定义的方式） */
     private fun renderPayMethods() {
+        // 文案按收支切换：收入账单里不该出现"支出工具"（用户反馈的 UI 问题）
+        runCatching {
+            binding.root.findViewWithTag<android.widget.TextView>("payMethodLabel")?.text =
+                if (type == RecordType.INCOME) {
+                    "收款方式 / 收入来源（点击选择）"
+                } else {
+                    "支付方式 / 支出工具（点击选择）"
+                }
+        }
         binding.cgPayMethods.removeAllViews()
         val methods = COMMON_PAY_METHODS.toMutableList()
         if (payMethod.isNotBlank() && !methods.contains(payMethod)) methods.add(0, payMethod)

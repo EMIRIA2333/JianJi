@@ -151,7 +151,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
-                android:text="支付方式 / 支出工具（点击选择）" />
+                android:text="支付方式 / 支出工具（点击选择）"
+                android:tag="payMethodLabel" />
 
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/cgPayMethods"
