@@ -229,7 +229,15 @@ object ReceiptParser {
             amountHits++
             if (amountHits >= 3) break
         }
-        if (amountHits >= 3) {
+        // 更可靠的"多张卡片"判据：页面里出现 ≥2 次「使用…支付」或 ≥2 次「账单详情」，
+        // 说明是服务号账单页/列表页（真·单笔详情页只会出现 1 次）。
+        var multiCardCount = 0
+        val cardMatcher = Regex("使用[^\\n]{0,24}支付|账单详情|查看交易详情").findAll(text)
+        for (m in cardMatcher) {
+            multiCardCount++
+            if (multiCardCount >= 2) break
+        }
+        if (amountHits >= 3 || multiCardCount >= 2) {
             return reject("一页多笔（账单列表），交给列表补齐")
         }
         // 月账单/收支汇总页：顶部是"支出/收入/本月已省"这类**汇总数字**，不是一笔交易 → 不记
