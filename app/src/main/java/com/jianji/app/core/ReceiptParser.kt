@@ -219,6 +219,19 @@ object ReceiptParser {
         CHAT_MARKERS.firstOrNull { text.contains(it) }?.let { return reject("聊天页特征「$it」") }
         // 尚未完成支付的页面（付款键盘 / 待支付 / 失败）不能记账
         PENDING_STATE.firstOrNull { text.contains(it) }?.let { return reject("未完成支付「$it」") }
+        // **一页多笔**：微信支付服务号的「我的账单」页会连续展示多张支付卡片
+        // （每张都有"使用XX支付 / ¥金额 / 账单详情"）。以前会把第一张当成单笔账单记一条，
+        // 还会随着刷新反复记。这里按"页面里出现 ≥3 个 ¥金额"判定为多笔页面 → 不当作单笔。
+        // 用循环计数而不是 Matcher.results()（后者要 Java 9 / 高 API，minSdk 26 上会崩）
+        var amountHits = 0
+        val amountMatcher = CURRENCY_AMOUNT.matcher(text)
+        while (amountMatcher.find()) {
+            amountHits++
+            if (amountHits >= 3) break
+        }
+        if (amountHits >= 3) {
+            return reject("一页多笔（账单列表），交给列表补齐")
+        }
         // 月账单/收支汇总页：顶部是"支出/收入/本月已省"这类**汇总数字**，不是一笔交易 → 不记
         SUMMARY_MARKERS.filter { text.contains(it) }.takeIf { it.size >= 2 }?.let { return reject("月账单汇总页（${it.joinToString("/")}）") }
         // 账单「列表页」（多行金额 + 日期分组）交给 BillListParser 处理，
