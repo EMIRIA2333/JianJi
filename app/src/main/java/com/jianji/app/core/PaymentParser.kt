@@ -183,6 +183,9 @@ object PaymentParser {
     ).map { Pattern.compile(it) }
 
     /** 硬忽略：与记账无关或明确未完成，任何情况都不记录 */
+    /** 「支付成功，对方已收款」= 我付出去的钱（不是收入）—— 通知与页面里都有这句 */
+    private val EXPENSE_OVERRIDE = listOf("对方已收款", "对方已收钱", "支付成功")
+
     private val HARD_DENY = listOf(
         "支付失败", "付款失败", "扣款失败", "余额不足", "待支付", "待付款", "确认支付",
         "退款失败", "退款申请", "退款处理中",

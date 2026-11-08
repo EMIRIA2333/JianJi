@@ -267,6 +267,9 @@ object ReceiptParser {
         // 方向判定优先级：
         // 转账详情页 > 红包特判 > 平台分类（如「账单分类 退款/收款」）> 状态词 > 金额符号
         val type = when {
+            // 「支付成功，对方已收款」= 我付出去的钱（微信支付页面/服务号通知都有这句）；
+            // 必须放在最前，否则会被 INCOME_STATUS 里的「已收款」误判成收入（真实 bug）。
+            text.contains("对方已收款") || text.contains("对方已收钱") -> RecordType.EXPENSE
             transferType != null -> transferType
             redPacket != null -> redPacket
             platformCategory != null && Categories.isIncomeCategory(platformCategory) -> RecordType.INCOME
