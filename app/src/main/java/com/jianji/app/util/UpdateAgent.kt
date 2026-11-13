@@ -107,34 +107,58 @@ object UpdateAgent {
         AppLog.i("更新", "开始下载 $name（${url}）")
         dlExecutor.execute {
             try {
-                val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 15_000
-                    readTimeout = 30_000
-                    instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "JianJi/${latest.version}")
+                // 下载地址同样可能被代理分流拦掉：按顺序逐个尝试直连 / 镜像
+                val candidates = listOf(
+                    url,
+                    url.replace("https://github.com/", "https://gh-proxy.com/https://github.com/"),
+                    url.replace("https://github.com/", "https://ghproxy.net/https://github.com/")
+                ).filter { it.isNotBlank() }.distinct()
+
+                var succeeded = false
+                var lastError = "下载失败"
+                for (cand in candidates) {
+                    val ok = runCatching {
+                        AppLog.i("更新", "尝试下载：$cand")
+                        val conn = (java.net.URL(cand).openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 15_000
+                            readTimeout = 30_000
+                            instanceFollowRedirects = true
+                            setRequestProperty("User-Agent", "JianJi/${latest.version}")
+                        }
+                        try {
+                            if (conn.responseCode != 200) {
+                                lastError = "下载失败：HTTP ${conn.responseCode}"
+                                return@runCatching false
+                            }
+                            val total = conn.contentLengthLong.takeIf { it > 0 } ?: latest.apkSize
+                            conn.inputStream.use { input ->
+                                java.io.FileOutputStream(outFile).use { output ->
+                                    val buf = ByteArray(64 * 1024)
+                                    var read: Int
+                                    var done = 0L
+                                    var lastPct = -1
+                                    while (input.read(buf).also { read = it } > 0) {
+                                        output.write(buf, 0, read)
+                                        done += read
+                                        if (total > 0) {
+                                            val pct = (done * 100 / total).toInt()
+                                            if (pct != lastPct) { lastPct = pct; onProgress(done.toFloat() / total) }
+                                        }
+                                    }
+                                }
+                            }
+                            true
+                        } finally {
+                            runCatching { conn.disconnect() }
+                        }
+                    }.getOrDefault(false)
+                    if (ok && outFile.length() > 0) { succeeded = true; break }
                 }
-                if (conn.responseCode != 200) {
-                    onDone("下载失败：HTTP ${conn.responseCode}")
+                if (!succeeded) {
+                    AppLog.w("更新", "所有下载地址都失败：$lastError")
+                    onDone(lastError)
                     return@execute
                 }
-                val total = conn.contentLengthLong.takeIf { it > 0 } ?: latest.apkSize
-                conn.inputStream.use { input ->
-                    java.io.FileOutputStream(outFile).use { output ->
-                        val buf = ByteArray(64 * 1024)
-                        var read: Int
-                        var done = 0L
-                        var lastPct = -1
-                        while (input.read(buf).also { read = it } > 0) {
-                            output.write(buf, 0, read)
-                            done += read
-                            if (total > 0) {
-                                val pct = (done * 100 / total).toInt()
-                                if (pct != lastPct) { lastPct = pct; onProgress(done.toFloat() / total) }
-                            }
-                        }
-                    }
-                }
-                runCatching { conn.disconnect() }
                 AppLog.i("更新", "下载完成：${outFile.absolutePath}（${outFile.length()} 字节）")
                 if (outFile.length() <= 0) { onDone("下载失败：文件为空"); return@execute }
                 onProgress(1f)

@@ -74,24 +74,56 @@ object UpdateChecker {
      * 真正发起请求（阻塞，必须在后台线程调用）。
      * @return 最新版本；网络异常/限流/没有 Release 时返回 null（静默）
      */
-    fun fetchLatest(currentVersion: String, timeoutMs: Int = 10_000): Latest? = runCatching {
-        val url = URL("https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest")
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = timeoutMs
-            readTimeout = timeoutMs
-            setRequestProperty("Accept", "application/vnd.github+json")
-            // GitHub API 要求带 User-Agent
-            setRequestProperty("User-Agent", "JianJi/$currentVersion (Android)")
+    /**
+     * 依次尝试的 API 地址。
+     *
+     * 用户开着代理时，api.github.com 可能被分流规则拦掉（表现为"网络连接失败"），
+     * 所以直连失败后自动换公共镜像再试一次。
+     */
+    private fun apiHosts(): List<String> = listOf(
+        "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest",
+        "https://gh-proxy.com/https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest",
+        "https://ghproxy.net/https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
+    )
+
+    /**
+     * 读取 GitHub 最新版本。
+     *
+     * @param useProxy true 时走系统代理（Android 的 HttpURLConnection 默认就会用系统代理，
+     *                 这里显式置 true 是为了在部分 ROM 上确保生效）。
+     */
+    fun fetchLatest(
+        currentVersion: String,
+        timeoutMs: Int = 12_000,
+        useProxy: Boolean = true
+    ): Latest? {
+        for (host in apiHosts()) {
+            val latest = runCatching {
+                val conn = (URL(host).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = timeoutMs
+                    readTimeout = timeoutMs
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    // GitHub API 要求带 User-Agent
+                    setRequestProperty("User-Agent", "JianJi/$currentVersion (Android)")
+                    if (!useProxy) {
+                        // 显式直连（部分代理软件对 app 流量处理异常时用来兜底）
+                        @Suppress("DEPRECATION")
+                        setRequestProperty("Connection", "close")
+                    }
+                }
+                try {
+                    if (conn.responseCode != 200) return@runCatching null
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    parseLatest(body)
+                } finally {
+                    runCatching { conn.disconnect() }
+                }
+            }.getOrNull()
+            if (latest != null) return latest
         }
-        try {
-            if (conn.responseCode != 200) return null
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            parseLatest(body)
-        } finally {
-            runCatching { conn.disconnect() }
-        }
-    }.getOrNull()
+        return null
+    }
 
     // ---------------- 内部 ----------------
 
@@ -100,12 +132,24 @@ object UpdateChecker {
      * GitHub 的 assets 数组里每个对象都有 name / browser_download_url / size。
      */
     fun parseApkAsset(json: String): Triple<String, String, Long>? {
-        val blocks = Regex("\\{[^{}]*\"name\"\\s*:\\s*\"([^\"]*\\.apk)\"[^{}]*\\}").findAll(json)
-        for (m in blocks) {
+        // 先按对象切分（GitHub 的 assets 元素里字段顺序不固定：url 常常排在 name 前面，
+        // 所以不能要求 "name" 出现在对象开头——那样永远匹配不到，只剩"网页下载"）
+        val objects = Regex("\\{[^{}]*\\}").findAll(json)
+        for (m in objects) {
             val block = m.value
-            val url = Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"").find(block)?.groupValues?.get(1) ?: continue
-            val name = m.groupValues[1]
+            val url = Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"").find(block)
+                ?.groupValues?.get(1) ?: continue
+            val name = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(block)
+                ?.groupValues?.get(1) ?: continue
+            if (!name.endsWith(".apk", true) && !url.endsWith(".apk", true)) continue
             val size = Regex("\"size\"\\s*:\\s*(\\d+)").find(block)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            return Triple(url, name, size)
+        }
+        // 兜底：整个 JSON 里只要出现 apk 直链就用它
+        Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]+\\.apk)\"").find(json)?.let { m ->
+            val url = m.groupValues[1]
+            val name = url.substringAfterLast('/')
+            val size = Regex("\"size\"\\s*:\\s*(\\d+)").find(json)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
             return Triple(url, name, size)
         }
         return null
