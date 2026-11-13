@@ -31,6 +31,8 @@ object ReceiptParser {
         "支付成功", "付款成功", "交易成功", "扣款成功", "自动扣款成功", "免密支付",
         "收款成功", "已收款", "收款到账", "转账成功", "充值成功", "还款成功", "退款成功",
         "当前状态 支付成功", "当前状态 交易成功",
+        // 微信转账详情页：真机 OCR 只有「转账单号/转账时间/对方己收钱」，没有"支付成功"
+        "转账单号", "转账时间", "对方己收钱", "对方已收钱", "已存入零钱",
         // 退款（微信账单详情页写的是「已全额退款」「已退款」，不是「退款成功」）
         "已全额退款", "已退款", "部分退款", "退款记录", "退款到账", "已原路退回", "原路退回",
         // 红包：只有明确的收发状态才算账单依据（聊天里没领取的红包不会命中）
@@ -155,6 +157,15 @@ object ReceiptParser {
     )
     private val CURRENCY_AMOUNT = Pattern.compile("[¥￥]\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
     private val YUAN_AMOUNT = Pattern.compile("([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*元")
+
+    /**
+     * 空格/标点分隔的独立金额 token，如 OCR 出来的
+     * 「… 转账-转检阮祝後 对方己收钱 -14.40 微信转账 …」里的 -14.40。
+     * 要求带小数点（1~2 位）或带符号，避免把金额以外的整数（笔数、月份）当金额。
+     */
+    private val TOKEN_AMOUNT = Pattern.compile(
+        "(?:^|[\\s|｜])([+＋\\-－])?\\s*[¥￥]?\\s*([0-9][0-9,]*\\.[0-9]{1,2})(?=[\\s|｜]|$)"
+    )
 
     /** 独占一行的纯数字金额（可带 +/- 号），如 "-17.00"、"0.90"、"＋0.11" */
     private val LINE_AMOUNT = Pattern.compile(
@@ -484,13 +495,16 @@ object ReceiptParser {
     }
 
     /**
-     * 先剔除**单号行**再取金额。
-     * 真实 bug：支付宝「商户单号 XP1026111314200633236171006857」里的长数字串
-     * 会被当成金额（配合 OCR 吞小数点 → 金额离谱）。
+     * 剔除**单号本身**（不是整行）。
+     *
+     * 真实 bug：支付宝「商户单号 XP1026…」里的长数字串会被当成金额；
+     * 但微信 OCR 常把整页压成**一行**，里面还混着「转账单号」和真实金额，
+     * 若按整行删除会把金额一起删掉（微信转账一直识别不出来的原因）。
+     * 所以只删"单号后面的长数字串"（≥10 位连续数字）。
      */
-    private val SERIAL_LINE = Regex("(?m)^.*(?:单号|交易号|订单号|凭证号)[^\n]*$")
+    private val SERIAL_DIGITS = Regex("(?:单号|交易号|订单号|凭证号)[:：]?\\s*[A-Za-z]*[0-9]{8,}")
 
-    private fun stripSerialLines(text: String): String = text.replace(SERIAL_LINE, "")
+    private fun stripSerialLines(text: String): String = text.replace(SERIAL_DIGITS, "")
 
     fun extractAmount(text: String): Double? {
         val text = stripSerialLines(text)
@@ -503,6 +517,17 @@ object ReceiptParser {
                 val sign = m.group(1).orEmpty()
                 val v = m.group(2).replace(",", "").toDoubleOrNull()
                 if (v != null && v > 0 && v <= PaymentParser.MAX_AMOUNT) {
+                    return if (sign == "-" || sign == "－") -v else v
+                }
+            }
+        }
+        // 空格分隔的独立金额 token（OCR 常见的排版）
+        TOKEN_AMOUNT.matcher(text).let { m ->
+            while (m.find()) {
+                val sign = m.group(1).orEmpty()
+                val v = m.group(2).replace(",", "").toDoubleOrNull()
+                if (v != null && v > 0 && v <= PaymentParser.MAX_AMOUNT) {
+                    // 有符号时优先信符号；无符号时取第一个合理值
                     return if (sign == "-" || sign == "－") -v else v
                 }
             }
@@ -543,9 +568,12 @@ object ReceiptParser {
         }
         // 转账详情页 / 零钱明细：「转账-来自李四」「转账-给张三」里的名字就是对方
         // （以前会落到兜底文案「微信转账」，商户名就丢了）
-        Regex("转账[-—]?(?:来自|给|转给)\\s*([^\\n]{1,20})").find(text)?.let { m ->
+        // 「转账-转检阮祝後」：OCR 把"给"认成别的字，所以第 3 字不限定；
+        // 但必须**后面紧跟一个中文名字**，且不能是「转账时间/转账说明/转账单号」这类字段名。
+        Regex("转账[-—·]?(?:来自|转[^\\s时说单])?\\s*([\\u4e00-\\u9fa5A-Za-z0-9_]{2,16})").find(text)?.let { m ->
             val name = m.groupValues[1].trim().trimEnd('的', ' ', '（', '(')
-            if (name.length in 1..20) return name
+            val bad = listOf("时间", "说明", "单号", "凭证", "详情", "金额", "服务", "记录")
+            if (name.length in 1..20 && bad.none { name.contains(it) }) return name
         }
         MERCHANT_PATTERNS.forEach { p ->
             val m = p.matcher(text)
