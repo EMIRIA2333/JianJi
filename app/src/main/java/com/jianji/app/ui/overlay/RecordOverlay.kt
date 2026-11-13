@@ -339,6 +339,7 @@ class RecordOverlay(private val service: AccessibilityService) {
     }
 
     fun dismiss() {
+        isShowing = false
         handler.removeCallbacks(timeoutTask)
         val card = root ?: return
         runCatching {
@@ -356,5 +357,15 @@ class RecordOverlay(private val service: AccessibilityService) {
 
     companion object {
         private const val TIMEOUT_MS = 10_000L
+
+        /**
+         * 是否有卡片正在显示。
+         *
+         * OCR 用它判断"屏幕被简记自己占住了"——否则会拍到卡片上的
+         * 「识别到支出 ¥76.99 日用·支付宝」，导致金额和商户全错（真实 bug）。
+         */
+        @Volatile
+        var isShowing: Boolean = false
+            private set
     }
 }

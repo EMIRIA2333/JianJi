@@ -118,6 +118,14 @@ class AutoCaptureService : AccessibilityService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var overlay: RecordOverlay? = null
 
+    /**
+     * 待展示的悬浮卡片队列。
+     *
+     * 真实反馈：「上一个悬浮窗没确认前，不会弹新的悬浮窗」——以前新的那笔直接被丢掉
+     * （或依赖 deduper 判重），用户就少记一笔。这里改成排队：当前卡片 dismiss 后自动弹下一张。
+     */
+    private val overlayQueue = java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         // 门控：总开关关掉 → 一切扫描都不做（后台零开销）
@@ -877,8 +885,23 @@ class AutoCaptureService : AccessibilityService() {
         }
     }
 
+    /** 卡片关闭后，弹队列里的下一张 */
+    private fun pumpOverlayQueue() {
+        mainHandler.postDelayed({
+            runCatching {
+                if (!RecordOverlay.isShowing) overlayQueue.poll()?.invoke()
+            }
+        }, 400)
+    }
+
     /** 悬浮窗：显示当前分类 + 该商户的历史分类 + 常用分类，可当场改 */
     private fun showOverlay(app: App, pending: PendingRecord, record: Record, pkg: String) {
+        if (RecordOverlay.isShowing) {
+            // 当前已有卡片在等确认 → 排队，等它关掉再弹（以前这一笔会被直接丢掉）
+            overlayQueue.add { showOverlay(app, pending, record, pkg) }
+            AppLog.i("界面", "悬浮窗已有卡片，新账排队（队列 ${overlayQueue.size}）")
+            return
+        }
         // 分类候选需要在工作线程查库，视图创建与 addView 必须回到主线程（ViewRootImpl 需要 Looper）
         val suggestions = categorySuggestions(app, record, pkg)
         mainHandler.post {
@@ -907,6 +930,7 @@ class AutoCaptureService : AccessibilityService() {
                 }
 
                 override fun onIgnore() {
+                    pumpOverlayQueue()
                     app.post {
                         app.deduper.clearPending(record.type, record.amount, record.displayName)
                         app.deduper.remove(record.type, record.amount, record.displayName)
@@ -914,6 +938,7 @@ class AutoCaptureService : AccessibilityService() {
                 }
 
                 override fun onTimeout() {
+                    pumpOverlayQueue()
                     // 收起后转通知；同时清掉「待处理」标记，
                     // 否则同一商户紧接着的第二笔相同金额会被静默吞掉
                     app.post { app.deduper.clearPending(record.type, record.amount, record.displayName) }
@@ -1071,6 +1096,22 @@ class AutoCaptureService : AccessibilityService() {
             "已存入零钱", "对方已收", "转账-", "转账—"
         )
         return signs.count { text.contains(it) } >= 2
+    }
+
+    /**
+     * 屏幕是不是被简记自己的悬浮窗/确认卡片占住了。
+     *
+     * 真实 bug：用户停在账单页时，简记弹出的「识别到支出 ¥76.99 日用·支付宝…点击保存」卡片
+     * 覆盖在页面上 → OCR 拍到卡片文字 → 商户变成「支付宝」、金额变成 76.99（96.99 被卡片挡住）。
+     * 只要有悬浮窗在显示，就一律不 OCR。
+     */
+    private fun isOwnOverlayVisible(ocrText: String): Boolean {
+        if (RecordOverlay.isShowing) return true
+        val strong = listOf(
+            "识别到支出", "识别到收入", "保存记账", "确认账单", "点击「保存」",
+            "简记·自动记账", "简记 · 自动记账", "Hook 直读"
+        )
+        return strong.any { ocrText.contains(it) }
     }
 
     private fun handleOcrText(pkg: String, ocrText: String) {
