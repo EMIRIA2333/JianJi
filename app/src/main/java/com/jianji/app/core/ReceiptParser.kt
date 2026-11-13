@@ -88,7 +88,7 @@ object ReceiptParser {
         ) {
             return RecordType.INCOME
         }
-        if (text.contains("转账-给") || text.contains("转账—给") ||
+        if (text.contains("转账-给") || text.contains("转账—给") || text.contains("转给") ||
             text.contains("已转账给") || text.contains("对方已收款")
         ) {
             return RecordType.EXPENSE
@@ -190,6 +190,8 @@ object ReceiptParser {
         "转账时间", "收款时间", "转账-来自", "转账-给", "定位到聊天位置", "申请转账电子凭证", "查看往来交易",
         "单号", "分类", "标签", "更多", "推荐服务", "免密", "积分", "领取", "商品说明", "直接付款",
         "已记账", "记一笔", "服务", "状态", "金额", "查询", "投诉", "说明", "备注", "收起", "展开",
+        // 支付宝支付成功页顶部的按钮/提示（曾被当成商户名或备注，真实 bug）
+        "回首页", "完成", "去领取", "去看看", "获得花呗能量", "花呗能量", "奖励",
         "限时", "立减", "随机", "免息", "分期", "活动", "优惠", "红包", "抽奖", "开通", "领取",
         "下单", "专享", "特惠", "满减", "折扣", "返现", "兑换", "权益",
         // 转账成功页上的状态与按钮
@@ -471,7 +473,7 @@ object ReceiptParser {
     fun extractMerchant(text: String): String? {
         // 转账详情页 / 零钱明细：「转账-来自李四」「转账-给张三」里的名字就是对方
         // （以前会落到兜底文案「微信转账」，商户名就丢了）
-        Regex("转账[-—]?(?:来自|给)\\s*([^\\n]{1,20})").find(text)?.let { m ->
+        Regex("转账[-—]?(?:来自|给|转给)\\s*([^\\n]{1,20})").find(text)?.let { m ->
             val name = m.groupValues[1].trim().trimEnd('的', ' ', '（', '(')
             if (name.length in 1..20) return name
         }

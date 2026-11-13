@@ -1024,7 +1024,9 @@ class AutoCaptureService : AccessibilityService() {
                     isPageScanPkg(foregroundPkg) &&
                     isSourceAppForeground(foregroundPkg)
                 if (Prefs.isAutoEnabled(this@AutoCaptureService) &&
-                    foregroundH5 &&
+                    // 不再要求 foregroundH5：微信 H5 页面不产生无障碍事件，
+                    // 这个标志会一直是 false → 打开零钱明细/转账详情永远不 OCR（真实反馈）。
+                    // 只要真实前台是被监听的支付类应用就轮询，OCR 内部有 1.5s 限流 + 文本去重。
                     fgIsWatched &&
                     System.currentTimeMillis() - lastOcrPollAt > 1_200
                 ) {
