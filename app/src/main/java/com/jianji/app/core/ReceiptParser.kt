@@ -192,7 +192,9 @@ object ReceiptParser {
 
     /** 商户名排除词：这些行不是商户（含推广/活动文案与按钮） */
     private val NOT_MERCHANT = listOf(
-        "账单详情", "全部账单", "交易成功", "支付成功", "当前状态", "收款方", "商户", "时间", "方式",
+        // 注意：这里只放**字段标签/结构词**；特判见 isLabelOnly()，
+        // 因为真实商户名里也可能含"商户"（如「拼多多平台商户」）——不能用 contains 直接判死
+        "账单详情", "全部账单", "交易成功", "支付成功", "当前状态", "时间", "方式",
         // 平台名与页面结构词不能当商户（真实 bug：「微信支付账单详情」的商户被记成"微信"，
         // 而正确的商户是金额上方那行「示例便利店」）
         "微信", "支付宝", "零钱明细", "零钱余额", "零钱", "账单服务", "转账说明", "转账单号",
@@ -474,7 +476,17 @@ object ReceiptParser {
         return Math.round(cents * 100.0) / 100.0
     }
 
+    /**
+     * 先剔除**单号行**再取金额。
+     * 真实 bug：支付宝「商户单号 XP1026111314200633236171006857」里的长数字串
+     * 会被当成金额（配合 OCR 吞小数点 → 金额离谱）。
+     */
+    private val SERIAL_LINE = Regex("(?m)^.*(?:单号|交易号|订单号|凭证号)[^\n]*$")
+
+    private fun stripSerialLines(text: String): String = text.replace(SERIAL_LINE, "")
+
     fun extractAmount(text: String): Double? {
+        val text = stripSerialLines(text)
         LABELED_AMOUNT.matcher(text).let { m ->
             if (m.find()) m.group(1).replace(",", "").toDoubleOrNull()?.let { if (it > 0) return it }
         }
@@ -497,6 +509,16 @@ object ReceiptParser {
         return null
     }
 
+    /** 候选串**整体**等于某个字段标签时才算标签（避免「拼多多平台商户」被误杀） */
+    private val LABEL_ONLY = setOf(
+        "商户", "商户全称", "收款方", "收款方全称", "收单机构", "商品说明", "账单分类",
+        "标签", "备注", "更多信息", "推荐服务", "票单管理", "全部账单", "账单详情",
+        "支付时间", "付款方式", "交易单号", "商户单号", "当前状态", "支付奖励",
+        "更多", "收起", "展开", "请选择", "添加", "联系商家", "查看往来记录"
+    )
+
+    private fun isLabelOnly(s: String): Boolean = LABEL_ONLY.contains(s.trim())
+
     fun extractMerchant(text: String): String? {
         // 转账详情页 / 零钱明细：「转账-来自李四」「转账-给张三」里的名字就是对方
         // （以前会落到兜底文案「微信转账」，商户名就丢了）
@@ -512,7 +534,7 @@ object ReceiptParser {
                 // 如果整个名字就是表情（如「🐱」），保留原样，别把对方名字丢掉
                 val cleaned = raw.replace(Regex("^[^\\p{IsHan}\\p{L}\\p{N}]+"), "").trim()
                 val g = if (cleaned.length >= 2) cleaned else raw
-                if (g.length >= 2 && NOT_MERCHANT.none { g.contains(it) }) return g
+                if (g.length >= 2 && !isLabelOnly(g) && NOT_MERCHANT.none { g.contains(it) }) return g
             }
         }
         // 支付宝/微信账单详情：字段标签后面的**值**才是商户
@@ -532,7 +554,7 @@ object ReceiptParser {
         if (amountIdx > 0) {
             for (i in amountIdx - 1 downTo maxOf(0, amountIdx - 3)) {
                 val cand = lines[i].trimEnd('>', '›').trim()
-                if (cand.length in 2..30 && NOT_MERCHANT.none { cand.contains(it) } &&
+                if (cand.length in 2..30 && !isLabelOnly(cand) && NOT_MERCHANT.none { cand.contains(it) } &&
                     !cand.matches(Regex("[0-9.,¥￥+\\-\\s]+"))
                 ) return cand
             }
