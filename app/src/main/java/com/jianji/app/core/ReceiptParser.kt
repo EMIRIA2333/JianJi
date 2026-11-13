@@ -79,6 +79,9 @@ object ReceiptParser {
      */
     private val TRANSFER_OUT = Pattern.compile("转账[-—·]?转(?!账)")
 
+    /** 只要页面上出现「转账-XX」这种标题，就当转账详情页处理（OCR 无序也能判方向） */
+    private val TRANSFER_HINT = Pattern.compile("转账[-—·][^\\s]{1,4}")
+
     private val TRANSFER_DETAIL_FIELDS = listOf(
         "转账详情", "转账金额", "转账单号", "转账说明", "转账凭证"
     )
@@ -97,6 +100,8 @@ object ReceiptParser {
         // 只排除「来自」；同时「对方已收(款|钱)」永远是支出（钱出去了）。
         if (TRANSFER_IN.matcher(text).find()) return RecordType.INCOME
         if (text.contains("对方已收款") || text.contains("对方已收钱") ||
+            // OCR 常把「已」认成「己」（真实日志：「对方己收钱」）
+            text.contains("对方己收款") || text.contains("对方己收钱") ||
             text.contains("已被接收") || text.contains("已转账给") ||
             TRANSFER_OUT.matcher(text).find()
         ) {
@@ -275,7 +280,8 @@ object ReceiptParser {
 
         // 转账详情页：用「收款方 / 付款方」标签判断方向（比状态词可靠），
         // 两个标签都出现或都不出现时无法判断，宁可不记
-        val isTransferDetail = TRANSFER_DETAIL_FIELDS.any { text.contains(it) }
+        val isTransferDetail = TRANSFER_DETAIL_FIELDS.any { text.contains(it) } ||
+            TRANSFER_HINT.matcher(text).find()
         val transferType = if (isTransferDetail) transferDirection(text) else null
         if (isTransferDetail && transferType == null) return reject("转账方向不明（缺收款方/付款方）")
 
@@ -284,7 +290,8 @@ object ReceiptParser {
         val type = when {
             // 「支付成功，对方已收款」= 我付出去的钱（微信支付页面/服务号通知都有这句）；
             // 必须放在最前，否则会被 INCOME_STATUS 里的「已收款」误判成收入（真实 bug）。
-            text.contains("对方已收款") || text.contains("对方已收钱") -> RecordType.EXPENSE
+            text.contains("对方已收款") || text.contains("对方已收钱") ||
+                text.contains("对方己收款") || text.contains("对方己收钱") -> RecordType.EXPENSE
             transferType != null -> transferType
             redPacket != null -> redPacket
             platformCategory != null && Categories.isIncomeCategory(platformCategory) -> RecordType.INCOME
@@ -519,7 +526,21 @@ object ReceiptParser {
 
     private fun isLabelOnly(s: String): Boolean = LABEL_ONLY.contains(s.trim())
 
+    /**
+     * 含「商户」二字但**不是纯标签**的一行，基本就是商户名。
+     * OCR 常把「拼」认成「評/评/拼」，所以这里不依赖具体品牌字。
+     * 真实 bug：支付宝拼多多账单的「拼多多平台商户」一直取不到，兜底成了平台名"支付宝"。
+     */
+    private val PLATFORM_MERCHANT = Regex("(?m)^[^\\n]{0,12}(?:平台商户|商户)$")
+
     fun extractMerchant(text: String): String? {
+        // ① 最优先：形如「拼多多平台商户」的独立行
+        text.split("\n").map { it.trim() }.forEach { line ->
+            val clean = line.trimEnd('>', '›').trim()
+            if (clean.length in 4..24 && PLATFORM_MERCHANT.matches(clean) &&
+                !isLabelOnly(clean) && !clean.contains("单号")
+            ) return clean
+        }
         // 转账详情页 / 零钱明细：「转账-来自李四」「转账-给张三」里的名字就是对方
         // （以前会落到兜底文案「微信转账」，商户名就丢了）
         Regex("转账[-—]?(?:来自|给|转给)\\s*([^\\n]{1,20})").find(text)?.let { m ->
