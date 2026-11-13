@@ -80,11 +80,35 @@ object UpdateChecker {
      * 用户开着代理时，api.github.com 可能被分流规则拦掉（表现为"网络连接失败"），
      * 所以直连失败后自动换公共镜像再试一次。
      */
-    private fun apiHosts(): List<String> = listOf(
-        "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest",
-        "https://gh-proxy.com/https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest",
-        "https://ghproxy.net/https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
-    )
+    private fun apiHosts(): List<String> {
+        // /releases/latest 只返回**正式版**（GitHub 会跳过 Pre-release），
+        // 所以还要查 /releases 列表，才能发现测试版。
+        val paths = listOf(
+            "/releases/latest",
+            "/releases?per_page=10"
+        )
+        val mirrors = listOf(
+            "https://api.github.com",
+            "https://gh-proxy.com/https://api.github.com",
+            "https://ghproxy.net/https://api.github.com"
+        )
+        return paths.flatMap { path ->
+            mirrors.map { m -> "$m/repos/$REPO_OWNER/$REPO_NAME$path" }
+        }
+    }
+
+    /** 从 /releases 列表 JSON 里取版本号最高的一个 */
+    private fun parseBestFromList(json: String): Latest? {
+        // 列表里每个元素都含 tag_name / html_url / body / assets
+        val cuts = json.split("{\"url\"").drop(1)
+        var best: Latest? = null
+        for (raw in cuts) {
+            val block = "{\"url\"" + raw
+            val latest = parseLatest(block) ?: continue
+            if (best == null || compare(latest.version, best!!.version) > 0) best = latest
+        }
+        return best
+    }
 
     /**
      * 读取 GitHub 最新版本。
@@ -97,6 +121,7 @@ object UpdateChecker {
         timeoutMs: Int = 12_000,
         useProxy: Boolean = true
     ): Latest? {
+        var best: Latest? = null
         for (host in apiHosts()) {
             val latest = runCatching {
                 val conn = (URL(host).openConnection() as HttpURLConnection).apply {
@@ -115,14 +140,18 @@ object UpdateChecker {
                 try {
                     if (conn.responseCode != 200) return@runCatching null
                     val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    parseLatest(body)
+                    // /releases 是**数组**（含 Pre-release），/releases/latest 是单个对象
+                    if (host.contains("/releases?")) parseBestFromList(body) else parseLatest(body)
                 } finally {
                     runCatching { conn.disconnect() }
                 }
             }.getOrNull()
-            if (latest != null) return latest
+            if (latest != null) {
+                // 取所有来源里版本号**最高**的一个（不能因为先查到较低的正式版就停下）
+                if (best == null || compare(latest.version, best!!.version) > 0) best = latest
+            }
         }
-        return null
+        return best
     }
 
     // ---------------- 内部 ----------------
