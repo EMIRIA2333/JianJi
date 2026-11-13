@@ -201,6 +201,8 @@ object ReceiptParser {
         "已记账", "记一笔", "服务", "状态", "金额", "查询", "投诉", "说明", "备注", "收起", "展开",
         // 支付宝支付成功页顶部的按钮/提示（曾被当成商户名或备注，真实 bug）
         "回首页", "完成", "去领取", "去看看", "获得花呗能量", "花呗能量", "奖励",
+        // 支付宝「账单详情」的字段**标签**本身（值在别处）——不能当商户名（真实 bug：商户="全称"）
+        "收款方全称", "商户全称", "收单机构", "商品说明", "账单分类", "推荐服务", "票单管理", "更多信息",
         "限时", "立减", "随机", "免息", "分期", "活动", "优惠", "红包", "抽奖", "开通", "领取",
         "下单", "专享", "特惠", "满减", "折扣", "返现", "兑换", "权益",
         // 转账成功页上的状态与按钮
@@ -512,6 +514,17 @@ object ReceiptParser {
                 val g = if (cleaned.length >= 2) cleaned else raw
                 if (g.length >= 2 && NOT_MERCHANT.none { g.contains(it) }) return g
             }
+        }
+        // 支付宝/微信账单详情：字段标签后面的**值**才是商户
+        // 形如「商户全称 昆明理工大学津桥学院」或「商户全称\n昆明理工大学津桥学院」
+        val LABEL_VALUE = Regex(
+            "(?:商户全称|收款方全称|收款方|商户名称)[:：]?\\s*[|｜]?\\s*([^\\n|｜]{2,30})"
+        )
+        LABEL_VALUE.find(text)?.let { m ->
+            val v = m.groupValues[1].trim().trimEnd('>', '›').trim()
+            if (v.length in 2..30 && NOT_MERCHANT.none { v.contains(it) } &&
+                !v.matches(Regex("[0-9.,¥￥+\\-\\s]+"))
+            ) return v
         }
         // 兜底：金额行上方最近的一行通常是商户名
         val lines = text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }

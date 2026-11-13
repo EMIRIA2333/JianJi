@@ -968,6 +968,20 @@ class AutoCaptureService : AccessibilityService() {
     }
 
     /** 当前前台窗口是否就是来源应用（决定能否直接把悬浮卡片盖在支付页面上） */
+    /**
+     * 微信/支付宝的账单、转账详情经常在**外部浏览器的 Custom Tabs**里打开
+     * （日志实证：微信转账页前台是 com.microsoft.emmx，页面标题「打开链接方式 Edge / 在微信内打开链接」）。
+     * 这时前台包名不是微信，原来的 isSourceAppForeground 会直接跳过 → 永远不 OCR。
+     */
+    private val WEBVIEW_SHELLS = listOf(
+        "com.microsoft.emmx", "com.android.chrome", "com.tencent.mtt",
+        "com.UCMobile", "com.android.browser", "com.miui.browser", "org.mozilla.firefox"
+    )
+
+    /** 当前前台是否是"承载支付页的浏览器壳" */
+    private fun isWebShellForeground(): Boolean =
+        WEBVIEW_SHELLS.any { runCatching { isSourceAppForeground(it) }.getOrDefault(false) }
+
     private fun isSourceAppForeground(pkg: String): Boolean {
         val root = rootInActiveWindow ?: return false
         return root.packageName?.toString() == pkg
