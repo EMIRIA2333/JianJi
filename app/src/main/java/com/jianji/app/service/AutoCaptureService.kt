@@ -1043,7 +1043,27 @@ class AutoCaptureService : AccessibilityService() {
     }
 
     /** 把 OCR 文本当页面文本解析并记账（无障碍取不到内容的 H5 页面用） */
+    /**
+     * OCR 文本是否像"账单/支付/转账详情页"。
+     *
+     * 真实 bug：微信**聊天列表主页**也会被 OCR（一屏全是聊天条目），
+     * 偶尔凑巧命中金额 → 记一笔错的（金额 1100、商户「全称」就是这么来的）。
+     * 这里要求必须出现账单特征字段，否则整段丢弃。
+     */
+    private fun looksLikeBillPage(text: String): Boolean {
+        val signs = listOf(
+            "当前状态", "支付时间", "转账时间", "收款时间", "转账单号", "交易单号",
+            "商户全称", "收款方", "付款方式", "交易方式", "账单分类", "商户单号",
+            "已存入零钱", "对方已收", "转账-", "转账—"
+        )
+        return signs.count { text.contains(it) } >= 2
+    }
+
     private fun handleOcrText(pkg: String, ocrText: String) {
+        if (!looksLikeBillPage(ocrText)) {
+            AppLog.i("扫描", "OCR 内容不像账单页，跳过（${ocrText.length} 字）")
+            return
+        }
         // ⚠️ 防止「OCR 拍到简记自己的确认卡片」形成回路：
         // 卡片上写着「识别到收入 +¥910.00 … 点击「保存」直接记账 … 确认账单 金额 910.00」，
         // 以前会被再识别一次 → 金额变成 910（真实 bug）。
@@ -1057,7 +1077,15 @@ class AutoCaptureService : AccessibilityService() {
         }
         val app = applicationContext as App
         app.post {
-            val receipt = ReceiptParser.parse(pkg, ocrText)
+            val receipt0 = ReceiptParser.parse(pkg, ocrText)
+            // OCR 会把「¥11.00」认成「¥1100」→ 按分还原（真实 bug：记成 1100 元）
+            val receipt = receipt0?.let {
+                val fixed = ReceiptParser.fixOcrAmount(it.amount, ocrText)
+                if (fixed != it.amount) {
+                    AppLog.i("扫描", "OCR 金额纠错：${it.amount} → $fixed")
+                    it.copy(amount = fixed)
+                } else it
+            }
             if (receipt == null) {
                 RecognitionLog.add(
                     PaymentParser.platformName(pkg) + " 截图识别未通过：" +

@@ -69,6 +69,16 @@ object ReceiptParser {
      * 注意：**不含「转账时间」** —— 收款成功页（「你已收款，资金已存入零钱」+转账时间/收款时间）
      * 也带「转账时间」，但它的方向由状态词就能确定，不需要收款方/付款方。
      */
+    /** 我收到的转账：「转账-来自X」「已存入零钱」 */
+    private val TRANSFER_IN = Pattern.compile("转账[-—·]?来自")
+
+    /**
+     * 我转出去的转账：「转账-转给X」。
+     * OCR 常把「转给」认成 转检 / 转纶 / 转纥 / 转烚，
+     * 所以这里**不限定第二个字**，只要求「转账-转X」且不是「转账」本身。
+     */
+    private val TRANSFER_OUT = Pattern.compile("转账[-—·]?转(?!账)")
+
     private val TRANSFER_DETAIL_FIELDS = listOf(
         "转账详情", "转账金额", "转账单号", "转账说明", "转账凭证"
     )
@@ -83,13 +93,12 @@ object ReceiptParser {
      */
     fun transferDirection(text: String): Int? {
         // ① 明确写法（最可靠）
-        if (text.contains("转账-来自") || text.contains("转账—来自") ||
-            text.contains("已存入零钱") || text.contains("已转入零钱")
-        ) {
-            return RecordType.INCOME
-        }
-        if (text.contains("转账-给") || text.contains("转账—给") || text.contains("转给") ||
-            text.contains("已转账给") || text.contains("对方已收款")
+        // OCR 常把「转给」认成 转检/转纶/转纥…，所以「转账-转X」后面不限定具体字，
+        // 只排除「来自」；同时「对方已收(款|钱)」永远是支出（钱出去了）。
+        if (TRANSFER_IN.matcher(text).find()) return RecordType.INCOME
+        if (text.contains("对方已收款") || text.contains("对方已收钱") ||
+            text.contains("已被接收") || text.contains("已转账给") ||
+            TRANSFER_OUT.matcher(text).find()
         ) {
             return RecordType.EXPENSE
         }
@@ -447,6 +456,22 @@ object ReceiptParser {
     }
 
     /** 返回带符号金额（负号表示支出）；找不到返回 null */
+    /**
+     * OCR 金额纠错。
+     *
+     * 真实 bug：支付宝「¥11.00」被 OCR 认成「¥1100」/「¥1100.00」→ 记成 1100 元。
+     * 规则：金额 ≥ 1000 且以 00 结尾（或就是整数）时，若除以 100 仍 ≥ 1，则按分为单位还原。
+     * 只对**页面 OCR 通道**生效，避免影响真实大额账单。
+     */
+    fun fixOcrAmount(raw: Double, text: String): Double {
+        if (raw < 1000) return raw
+        val cents = raw / 100.0
+        if (cents < 1) return raw
+        // 页面里如果出现「¥11.00」这种带小数点的原始写法，说明 OCR 另有正确值，交给正常流程
+        if (Regex("[¥￥]\\s*[0-9][0-9,]*\\.[0-9]{2}").containsMatchIn(text)) return raw
+        return Math.round(cents * 100.0) / 100.0
+    }
+
     fun extractAmount(text: String): Double? {
         LABELED_AMOUNT.matcher(text).let { m ->
             if (m.find()) m.group(1).replace(",", "").toDoubleOrNull()?.let { if (it > 0) return it }
