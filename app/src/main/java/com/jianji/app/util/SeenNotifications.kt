@@ -23,16 +23,22 @@ object SeenNotifications {
     /** @return true = 这条通知还没处理过（并已登记）；false = 重复，应跳过 */
     @Synchronized
     fun isNewAndRemember(ctx: Context, pkg: String, title: String, text: String, notifyTime: Long): Boolean {
-        val key = NotificationFingerprint.key(NotificationFingerprint.of(pkg, title, text, notifyTime))
+        // 指纹用**内容 + 30 秒时间桶**，并额外比对相邻桶：
+        // 四条通路（Hook / 通知读取 / 无障碍 / root）拿到的时间戳来源不同，
+        // 用精确值会让同一条通知算出不同指纹 → 同一笔付一次记两笔。
+        val keys = NotificationFingerprint
+            .keys(pkg, title, text, notifyTime)
+            .map { NotificationFingerprint.key(it) }
+        val primary = keys[keys.size / 2]
         val now = System.currentTimeMillis()
         val entries = load(ctx).toMutableList()
         // 清理过期
         entries.removeAll { now - it.second > TTL_MS }
-        if (entries.any { it.first == key }) {
+        if (entries.any { it.first in keys }) {
             save(ctx, entries)
             return false
         }
-        entries.add(key to now)
+        entries.add(primary to now)
         while (entries.size > MAX) entries.removeAt(0)
         save(ctx, entries)
         return true

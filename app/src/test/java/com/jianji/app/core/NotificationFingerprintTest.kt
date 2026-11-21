@@ -41,12 +41,30 @@ class NotificationFingerprintTest {
 
     @Test
     fun aRealSecondPaymentIsNotKilled() {
-        // 同样金额但通知时间戳不同 = 新的一笔，必须能记
+        // 同样金额但通知时间戳不同 = 新的一笔，必须能记。
+        // 指纹里的时间按 30 秒分桶（跨通道容差），所以这里要用**跨桶**的时间：
+        // 5 秒内的差别是"同一条通知被不同通道各报了一次"，不能算两笔。
         val first = NotificationFingerprint.of(pkg, title, text, 1_000L)
-        val second = NotificationFingerprint.of(pkg, title, text, 2_000L)
+        val second = NotificationFingerprint.of(pkg, title, text, 40_000L)
         assertNotEquals(first, second)
         // 金额不同也要区分
         val other = NotificationFingerprint.of(pkg, title, text.replace("0.09", "0.10"), 1_000L)
         assertNotEquals(first, other)
+    }
+
+    @Test
+    fun sameNotificationFromDifferentChannelsSharesAKey() {
+        // 真实 bug：同一条免密支付，Hook 通道与「通知读取」通道各报一次，
+        // 两次的 notifyTime 差几百毫秒 → 以前的精确时间戳指纹不相等 → 同一笔记两遍。
+        val fromHook = NotificationFingerprint.keys(pkg, title, text, 1_791_121_288_436L)
+        val fromListener = NotificationFingerprint.keys(pkg, title, text, 1_791_121_288_436L + 260L)
+        assert(fromHook.any { a -> fromListener.any { it == a } }) {
+            "同一通知换个通道必须共享至少一个指纹键（容差 ±1 桶）"
+        }
+        // 反过来：隔了 2 分钟的同额通知，不能共享键（那是真的第二笔）
+        val later = NotificationFingerprint.keys(pkg, title, text, 1_791_121_288_436L + 120_000L)
+        assert(fromHook.none { a -> later.any { it == a } }) {
+            "两分钟后的新通知不能与之前共享指纹键"
+        }
     }
 }

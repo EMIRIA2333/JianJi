@@ -287,10 +287,15 @@ class RecordOverlay(private val service: AccessibilityService) {
             wm.addView(card, lp)
             root = card
             params = lp
+            // 以前这里忘了置 true：伴随的 isShowing 只能在 dismiss() 里变 false，
+            // 于是它永远是 false —— 排队逻辑失效（新账直接顶掉卡片），
+            // OCR 也会把自家卡片拍进去（"截图识别到 ¥76.99 日用"就是这个）。
+            isShowing = true
             resetTimeout()
             true
         }.getOrDefault(false).also { ok ->
             if (!ok) {
+                isShowing = false
                 root = null
                 params = null
             }

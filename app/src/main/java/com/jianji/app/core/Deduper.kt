@@ -90,9 +90,14 @@ class Deduper(
      * 拼多多自己的「已自动扣款」、微信支付的「已扣费」、银行的「发生快捷支付扣款」。
      * 它们金额相同、方向相同，但**包名不同**。
      *
-     * 规则：同方向 + 同金额 + **不同包名** +（商户相近 或 其中一方是平台通用名）→ 视为同一笔，跳过。
-     * 同一个包名重复出现**不会**被判重（用户确实可能连续付两次同样金额）。
+     * 规则：同方向 + 同金额 + **不是同一个通道** +（商户相近 或 其中一方是平台通用名）→ 视为同一笔，跳过。
+     * 同一个包名**同一条通道**重复出现**不会**被判重（用户确实可能连续付两次同样金额）。
      *
+     * 「通道」= 包名 + 采集通路（Hook / 通知读取 / 无障碍 / root）。
+     * 3.24.0 修复：以前只比包名，于是**同一个 app 的 Hook 通道与通知读取通道**
+     * 永远互不拦截 → 同一条支付宝免密通知记了两笔（真机日志 12:01:18.858 / 12:01:19.064）。
+     *
+     * @param via 采集通路名（"Hook" / "通知读取" / "无障碍" / "root"），空串表示不区分通路
      * @param windowMs 跨通道判定窗口（默认 90 秒，比同通道去重窗口短，避免误杀真实第二笔）
      */
     fun crossChannelDuplicate(
@@ -100,6 +105,7 @@ class Deduper(
         type: Int,
         amount: Double,
         merchant: String,
+        via: String = "",
         windowMs: Long = CROSS_WINDOW_MS
     ): Boolean {
         val now = clock()
@@ -110,13 +116,16 @@ class Deduper(
         }
         val key = "$type|${amtKey(amount)}"
         val hit = cross[key]
-        if (hit != null && hit.pkg != pkg &&
+        // 同一个包名 + 同一条通路 = 真实第二笔，放行；
+        // 包名不同、或包名相同但通路不同（Hook vs 通知读取）= 同一笔的其他通道，判重。
+        val sameChannel = hit != null && hit.pkg == pkg && hit.via == via
+        if (hit != null && !sameChannel &&
             (isGenericMerchant(merchant) || isGenericMerchant(hit.merchant) ||
                 similarMerchant(merchant, hit.merchant))
         ) {
             return true
         }
-        cross[key] = CrossEntry(pkg, merchant, now)
+        cross[key] = CrossEntry(pkg, merchant, via, now)
         while (cross.size > 64) {
             val first = cross.keys.firstOrNull() ?: break
             cross.remove(first)
@@ -124,7 +133,7 @@ class Deduper(
         return false
     }
 
-    private data class CrossEntry(val pkg: String, val merchant: String, val at: Long)
+    private data class CrossEntry(val pkg: String, val merchant: String, val via: String, val at: Long)
 
     // ---------------- 内部 ----------------
 

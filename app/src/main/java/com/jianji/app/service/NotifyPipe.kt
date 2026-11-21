@@ -82,9 +82,11 @@ object NotifyPipe {
 
             // **同一笔支付只记一次**：拼多多「已自动扣款」+ 微信「已扣费」+ 银行「快捷支付扣款」
             // 是三条**不同包名**的通知，金额与方向相同 —— 以前会各记一笔。
-            // 判定要求"不同包名 + 同金额 + 商户相近或含平台通用名"，90 秒窗口；
-            // 同包名重复出现不会判重，所以「同一商户连续两笔相同金额」仍然保留。
-            if (app.deduper.crossChannelDuplicate(pkg, record.type, record.amount, record.displayName)) {
+            // 判定要求"不是同一条通道 + 同金额 + 商户相近或含平台通用名"，90 秒窗口；
+            // 同一个包名的同一条通道重复出现不会判重，所以「同一商户连续两笔相同金额」仍然保留。
+            // 3.24.0：把「通道」细化为 包名 + 采集通路（Hook / 通知读取 / 无障碍 / root），
+            // 于是同一个 app 的 Hook 与通知读取两条通路也能互相拦住（以前会记两笔）。
+            if (app.deduper.crossChannelDuplicate(pkg, record.type, record.amount, record.displayName, via)) {
                 RecognitionLog.add("${PaymentParser.platformName(pkg)} 同一笔支付的其他通道通知已记过($via)，跳过")
                 AppLog.i("识别", "跨通道去重跳过：$pkg ${Money.plain(record.amount)} via=$via")
                 return@post

@@ -17,6 +17,7 @@ import com.jianji.app.core.Categories
 import com.jianji.app.core.HookProtocol
 import com.jianji.app.core.NotifyText
 import com.jianji.app.core.ChatPaymentParser
+import com.jianji.app.core.PageGuard
 import com.jianji.app.core.PaymentParser
 import com.jianji.app.core.ReceiptParser
 import com.jianji.app.core.Record
@@ -125,6 +126,9 @@ class AutoCaptureService : AccessibilityService() {
      * （或依赖 deduper 判重），用户就少记一笔。这里改成排队：当前卡片 dismiss 后自动弹下一张。
      */
     private val overlayQueue = java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
+
+    /** 解锁 / 亮屏广播（用于补弹锁屏期间排队的悬浮窗） */
+    private var screenReceiver: android.content.BroadcastReceiver? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -335,6 +339,18 @@ class AutoCaptureService : AccessibilityService() {
         lastPageHash = hash
 
         app.post {
+            // 0) 页面级硬拦截：这类页面永远不该记账（真机误记反馈）
+            if (PageGuard.isChatListPage(joined)) {
+                logPageMiss(pkg, joined, "聊天列表页")
+                noteScanResult(false)
+                return@post
+            }
+            if (PageGuard.isPendingPayPage(joined)) {
+                logPageMiss(pkg, joined, "付款页金额未确定")
+                noteScanResult(false)
+                return@post
+            }
+
             // 1) 账单详情页 / 支付成功页：精确解析（金额、时间、分类、支付方式）
             val receipt = ReceiptParser.parse(pkg, joined)
             if (receipt != null) {
@@ -889,13 +905,43 @@ class AutoCaptureService : AccessibilityService() {
     private fun pumpOverlayQueue() {
         mainHandler.postDelayed({
             runCatching {
+                // 锁屏/息屏期间不能弹（弹了也看不见，10 秒后超时会把这一笔吃掉）
+                if (!isScreenAvailable()) {
+                    AppLog.i("界面", "锁屏中，悬浮窗队列暂停（队列 ${overlayQueue.size}）")
+                    return@postDelayed
+                }
                 if (!RecordOverlay.isShowing) overlayQueue.poll()?.invoke()
             }
         }, 400)
     }
 
+    /**
+     * 屏幕是否可以正常展示悬浮窗。
+     *
+     * 真实 bug：「付款页还没弹悬浮窗就锁屏 → 解锁后即使还在付款页也不再弹」。
+     * 根因是锁屏时卡片照样 addView（看不见），10 秒超时后 onTimeout 把「待确认」标记清掉，
+     * 这一笔就彻底没了。现在锁屏期间一律不弹，留在队列里等解锁后重放。
+     */
+    private fun isScreenAvailable(): Boolean {
+        if (!isInteractive()) return false
+        val km = getSystemService(android.content.Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+            ?: return true
+        return km.isKeyguardLocked.not()
+    }
+
     /** 悬浮窗：显示当前分类 + 该商户的历史分类 + 常用分类，可当场改 */
     private fun showOverlay(app: App, pending: PendingRecord, record: Record, pkg: String) {
+        // 锁屏 / 息屏：不弹，排队等解锁（否则 10 秒超时会把这一笔吃掉）
+        if (!isScreenAvailable()) {
+            if (overlayQueue.size < MAX_OVERLAY_QUEUE) {
+                overlayQueue.add { showOverlay(app, pending, record, pkg) }
+                AppLog.i("界面", "锁屏中，悬浮窗延后到解锁后（队列 ${overlayQueue.size}）")
+            } else {
+                AppLog.i("界面", "锁屏中且队列已满，直接转通知")
+                fallbackNotify(app, pending, record)
+            }
+            return
+        }
         if (RecordOverlay.isShowing) {
             // 当前已有卡片在等确认 → 排队，等它关掉再弹（以前这一笔会被直接丢掉）
             overlayQueue.add { showOverlay(app, pending, record, pkg) }
@@ -1198,6 +1244,29 @@ class AutoCaptureService : AccessibilityService() {
         RecognitionLog.add(
             "无障碍服务已连接" + if (listener) "；通知读取也已开启（双通道）" else "（建议再开「通知使用权」，不弹通知也能记）"
         )
+        // 解锁 / 亮屏后把锁屏期间排队的悬浮窗补弹出来
+        // （真实 bug：付款页在悬浮窗弹出前锁屏，解锁后就再也不弹了）
+        runCatching {
+            if (screenReceiver == null) {
+                val r = object : android.content.BroadcastReceiver() {
+                    override fun onReceive(c: android.content.Context?, i: android.content.Intent?) {
+                        val action = i?.action ?: return
+                        if (action == android.content.Intent.ACTION_USER_PRESENT ||
+                            action == android.content.Intent.ACTION_SCREEN_ON
+                        ) {
+                            AppLog.i("界面", "屏幕可用（$action），补弹排队的悬浮窗（队列 ${overlayQueue.size}）")
+                            pumpOverlayQueue()
+                        }
+                    }
+                }
+                val filter = android.content.IntentFilter().apply {
+                    addAction(android.content.Intent.ACTION_USER_PRESENT)
+                    addAction(android.content.Intent.ACTION_SCREEN_ON)
+                }
+                registerReceiver(r, filter)
+                screenReceiver = r
+            }
+        }
         // 常驻状态通知：让用户随时确认自动记账是否在运行
         refreshStatusNotification()
     }
@@ -1207,6 +1276,8 @@ class AutoCaptureService : AccessibilityService() {
             overlay?.dismiss()
             overlay = null
         }
+        screenReceiver?.let { runCatching { unregisterReceiver(it) } }
+        screenReceiver = null
         // 无障碍断开 = 扫描必须停止：连带把依赖它的 root 轮询一并停掉
         com.jianji.app.util.BackgroundWork.sync(this)
         return super.onUnbind(intent)
@@ -1217,6 +1288,8 @@ class AutoCaptureService : AccessibilityService() {
             overlay?.dismiss()
             overlay = null
         }
+        screenReceiver?.let { runCatching { unregisterReceiver(it) } }
+        screenReceiver = null
         com.jianji.app.util.BackgroundWork.sync(this)
         super.onDestroy()
     }
@@ -1246,5 +1319,8 @@ class AutoCaptureService : AccessibilityService() {
 
         /** 单组最多一次补多少条（防止误识别刷屏） */
         private const val MAX_PER_GROUP = 5
+
+        /** 悬浮窗排队上限（锁屏期间只留最近几笔，避免无限堆积） */
+        private const val MAX_OVERLAY_QUEUE = 6
     }
 }

@@ -848,15 +848,37 @@ class ProfileFragment : Fragment() {
             .create()
         progressDialog.show()
 
+        // 下载跑在 UpdateAgent 的后台线程上，进度回调也在那条线程里 ——
+        // 直接改 View 会因为「只有创建视图层次结构的原始线程才能触及其视图」
+        // 抛 CalledFromWrongThreadException 被 runCatching 吞掉，表现就是进度条一直不动。
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        var lastPct = -1
         UpdateAgent.downloadAndInstall(
             ctx, latest,
-            onProgress = { p -> runCatching { if (p >= 0f) bar.progress = (p * 100).toInt() } },
+            onProgress = { p ->
+                if (p >= 0f) {
+                    val pct = (p * 100).toInt().coerceIn(0, 100)
+                    if (pct != lastPct) {
+                        lastPct = pct
+                        mainHandler.post {
+                            runCatching {
+                                if (progressDialog.isShowing) {
+                                    bar.progress = pct
+                                    progressDialog.setTitle("正在下载 ${latest.version}  $pct%")
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             onDone = { err ->
-                runCatching { progressDialog.dismiss() }
-                if (err == null) {
-                    toast("下载完成：请在弹出的系统界面点「安装」")
-                } else {
-                    toast(err)
+                mainHandler.post {
+                    runCatching { if (progressDialog.isShowing) progressDialog.dismiss() }
+                    if (err == null) {
+                        toast("下载完成：请在弹出的系统界面点「安装」")
+                    } else {
+                        toast(err)
+                    }
                 }
             }
         )

@@ -284,4 +284,52 @@ class ChatPaymentParserTest {
         """.trimIndent()
         assertTrue(ChatPaymentParser.parse(PaymentParser.PKG_WECHAT, chat).isEmpty())
     }
+
+    @Test
+    fun wechatHomeScreenWithTransferPreviewIsIgnored() {
+        // 真实 bug：微信主界面（聊天列表）放着不动也会记账。
+        // 列表行的消息预览里可能出现「已收款」「转账」，但它不是气泡。
+        val home = """
+            浮窗
+            退出浮窗
+            打开侧栏
+            搜索
+            更多功能
+            エミリアチャン
+            在线
+            微信(3)
+            主页
+            主页
+            通讯录
+            通讯录
+            发现
+            发现
+            我
+            我
+            正在加载…
+            正在加载…
+            张三：转账 已收款 ¥9.00
+            李四：[转账] 已被接收
+        """.trimIndent()
+        assertTrue(ChatPaymentParser.parse(PaymentParser.PKG_WECHAT, home).isEmpty())
+    }
+
+    @Test
+    fun twoRealTransfersOfTheSameAmountAreBothKept() {
+        // 同金额的两笔**真实**转账（不同气泡）不能合并成一条
+        val chat = """
+            老王
+            上午 9:00
+            ¥8.88
+            转账
+            已被接收
+            上午 9:30
+            ¥8.88
+            转账
+            已被接收
+            按住 说话
+        """.trimIndent()
+        val entries = ChatPaymentParser.parse(PaymentParser.PKG_WECHAT, chat)
+        assertEquals(2, entries.size)
+    }
 }

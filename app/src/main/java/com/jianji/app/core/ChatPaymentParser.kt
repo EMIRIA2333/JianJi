@@ -82,6 +82,9 @@ object ChatPaymentParser {
         if ((EXPENSE_MARKERS + INCOME_MARKERS + SKIP_MARKERS).none { text.contains(it) }) return emptyList()
         // 账单详情页交给 ReceiptParser，避免同一笔记两次
         if (RECEIPT_GUARD.count { text.contains(it) } >= 2) return emptyList()
+        // 微信**聊天列表页**（主界面）没有气泡，只有「昵称 + 时间 + 预览」，
+        // 预览里一旦出现「已收款」「转账」就会被当气泡解析 → 放着一动不动也记账（真实 bug）。
+        if (PageGuard.isChatListPage(text)) return emptyList()
 
         val lines = text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.size < 3) return emptyList()
