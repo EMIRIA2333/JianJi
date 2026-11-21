@@ -340,6 +340,11 @@ class AutoCaptureService : AccessibilityService() {
 
         app.post {
             // 0) 页面级硬拦截：这类页面永远不该记账（真机误记反馈）
+            if (PageGuard.isAppHomePage(joined)) {
+                logPageMiss(pkg, joined, "App 首页信息流")
+                noteScanResult(false)
+                return@post
+            }
             if (PageGuard.isChatListPage(joined)) {
                 logPageMiss(pkg, joined, "聊天列表页")
                 noteScanResult(false)
@@ -872,6 +877,13 @@ class AutoCaptureService : AccessibilityService() {
             val id = runCatching { RecordWriter.insert(this, record) }.getOrDefault(-1L)
             app.deduper.clearPending(record.type, record.amount, record.displayName)
             if (id > 0) {
+                // 日志补全：以前这条路径不写 AppLog，导出日志里只能看到通知、看不到是它记的账，
+                // 排查「谁记了这三笔 -23.35」时完全没有线索（真实教训）。
+                AppLog.i(
+                    "记账",
+                    "入库(直存) id=$id ${if (record.type == RecordType.INCOME) "收入" else "支出"} " +
+                        "${Money.plain(record.amount)} 分类=${record.category} 商户=${record.displayName} 相似=$similar"
+                )
                 val sign = if (record.type == RecordType.INCOME) "+" else "-"
                 val tail = if (similar) "（与近期账单雷同，记错了就点撤销）" else "，点「撤销」可反悔"
                 Notifier.notifyImported(
@@ -1161,6 +1173,16 @@ class AutoCaptureService : AccessibilityService() {
     }
 
     private fun handleOcrText(pkg: String, ocrText: String) {
+        // 页面级硬拦截同样适用于 OCR：支付宝首页的「最近消息」卡片
+        // 「闲鱼 自动扣款成功￥23.35 · 43分钟前」会被 OCR 读成成交页（真实 bug）。
+        if (PageGuard.isAppHomePage(ocrText)) {
+            AppLog.i("扫描", "OCR 内容是 App 首页信息流，跳过（${ocrText.length} 字）")
+            return
+        }
+        if (PageGuard.isPendingPayPage(ocrText)) {
+            AppLog.i("扫描", "OCR 内容是未输金额的付款页，跳过（${ocrText.length} 字）")
+            return
+        }
         if (!looksLikeBillPage(ocrText)) {
             AppLog.i("扫描", "OCR 内容不像账单页，跳过（${ocrText.length} 字）")
             return

@@ -68,4 +68,41 @@ class PageGuardTest {
             "当前状态 支付成功 支付时间 2026-11-20 18:00 金额 ¥17.50"
         assertFalse(PageGuard.isChatListPage(bill))
     }
+
+    /** 日志里支付宝首页的真实文本（248 字那条，含「最近消息 闲鱼 自动扣款成功￥23.35 43分钟前」） */
+    private val alipayHome =
+        "首页 理财 消息 我的 松开刷新 搜索框 昆明 阴 10℃ 更多操作 搜索 全部 碰一下 " +
+            "云南省电子税务局 趣智校园 支付宝贴纸 医保 支付宝小荷包 为你推荐 消息盒子 " +
+            "闲鱼 自动扣款成功￥23.35 43分钟前 蚂蚁庄园 今日210克饲料待领取 1小时前 " +
+            "芝麻信用 芝麻分 70 速领取"
+
+    @Test
+    fun alipayHomePageIsBlocked() {
+        // 支付宝首页的「最近消息」卡片写着「自动扣款成功￥23.35 · 43分钟前」，
+        // 曾同时命中「自动扣款」+「扣款成功」→ 打开首页就记了三笔 -23.35
+        assertTrue(PageGuard.isAppHomePage(alipayHome))
+    }
+
+    @Test
+    fun alipayHomePageIsNotTreatedAsPaidEvidence() {
+        // 首页有「扣款成功」也不算成交证据，付款页仍然要被拦住
+        val payPageWithHomeBleed =
+            "删除 付款 添加备注 首页 理财 消息 我的 付款给个人 松开刷新 搜索框 更多操作 " +
+                "鑫隆超市(**美) 输入付款金额 碰一下"
+        assertTrue(PageGuard.isPendingPayPage(payPageWithHomeBleed))
+    }
+
+    @Test
+    fun realBillPageIsNotHomePage() {
+        // 真正的支付成功页必须放行
+        val paid = "支付成功 ¥23.35 闲鱼 当前状态 交易成功 交易单号 2026112122001 " +
+            "支付时间 2026-11-21 12:55:14 付款方式 花呗 商户全称 示例商户"
+        assertFalse(PageGuard.isAppHomePage(paid))
+    }
+
+    @Test
+    fun homePageIsNotChatListPage() {
+        // 支付宝首页也不该被误判成微信聊天列表页（两套规则互不干扰）
+        assertFalse(PageGuard.isChatListPage(alipayHome))
+    }
 }
